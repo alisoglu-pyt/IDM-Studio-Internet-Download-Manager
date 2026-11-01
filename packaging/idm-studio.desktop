@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=IDM Studio
+GenericName=Download Manager
+GenericName[tr]=İndirme Yöneticisi
+Comment=Multi-connection internet download manager with a Material 3 look
+Comment[tr]=Material 3 görünümlü, çok bağlantılı internet indirme yöneticisi
+Exec=idm-studio
+TryExec=idm-studio
+Icon=idm-studio
+Terminal=false
+Categories=Network;FileTransfer;
+Keywords=download;indirme;internet;idm;manager;
+StartupNotify=true
+StartupWMClass=idm-studio

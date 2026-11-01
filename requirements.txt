@@ -1,0 +1,2 @@
+# IDM Studio harici Python paketi kullanmaz.
+# Gereken tek sistem bileşeni Tkinter'dır (README'ye bakın).
