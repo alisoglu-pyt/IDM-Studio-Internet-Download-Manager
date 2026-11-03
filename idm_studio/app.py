@@ -6,15 +6,19 @@ import json
 import os
 import queue
 import sys
+import time
 import tkinter as tk
 from pathlib import Path
 
 from .cards import DownloadCard
-from .dialogs import AboutDialog, NewDownloadDialog
+from .dialogs import AboutDialog, NewDownloadDialog, SettingsDialog
 from .downloader import (
     ACTIVE_STATUSES,
     DEFAULT_CONNECTIONS,
+    DEFAULT_RETRIES,
     MAX_CONNECTIONS,
+    MAX_RETRIES,
+    PENDING_STATUSES,
     DownloadTask,
 )
 from .draw import draw_icon, make_app_icon, rounded_rect
@@ -26,7 +30,13 @@ from .i18n import (
     tr,
 )
 from .theme import Theme
-from .utils import default_download_dir, format_speed, open_path
+from .tray import TrayIcon
+from .utils import (
+    default_download_dir,
+    format_schedule,
+    format_speed,
+    open_path,
+)
 from .widgets import (
     IconButton,
     MaterialButton,
@@ -36,7 +46,7 @@ from .widgets import (
 )
 
 APP_NAME = "IDM Studio"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 CONFIG_DIR = Path.home() / ".config" / "idm-studio"
 STATE_FILE = CONFIG_DIR / "state.json"
 
@@ -58,9 +68,20 @@ class IDMApp(tk.Tk):
         self._filter = "all"
         self._download_dir = default_download_dir()
         self._connections = DEFAULT_CONNECTIONS
+        self._retries = DEFAULT_RETRIES
+        self._clipboard_watch = False
+        self._close_to_tray = True
         self._dialog: NewDownloadDialog | None = None
+        self._settings_dialog: SettingsDialog | None = None
         self._closing = False
+        self._force_quit = False
+        self._hidden_to_tray = False
+        self._tray: TrayIcon | None = None
+        self._tray_actions: queue.Queue[str] = queue.Queue()
+        self._tray_notified = False
+        self._last_clipboard = ""
         self._poll_after_id: str | None = None
+        self._clipboard_after_id: str | None = None
         self._nav_items: dict[str, NavItem] = {}
         self._folder_nav: NavItem | None = None
         self._snackbar: Snackbar | None = None
@@ -72,7 +93,13 @@ class IDMApp(tk.Tk):
         self._load_state()
         self.title(tr("app.title", app=APP_NAME))
         self._set_window_icon()
+        self._init_tray()
         self._build_ui()
+        if self._clipboard_watch:
+            try:
+                self._last_clipboard = self.clipboard_get()
+            except tk.TclError:
+                self._last_clipboard = ""
         self._update_counts()
         self._update_header()
         self._render_list(reset_scroll=True)
@@ -82,6 +109,7 @@ class IDMApp(tk.Tk):
         self.bind("<Control-l>", lambda _e: self._open_language_menu())
         self.bind("<F1>", lambda _e: self.open_about())
         self._poll_after_id = self.after(140, self._poll_queue)
+        self._clipboard_after_id = self.after(1200, self._poll_clipboard)
 
     # ------------------------------------------------------------------ pencere
     @property
@@ -91,6 +119,18 @@ class IDMApp(tk.Tk):
     @property
     def default_connections(self) -> int:
         return self._connections
+
+    @property
+    def default_retries(self) -> int:
+        return self._retries
+
+    @property
+    def clipboard_watch(self) -> bool:
+        return self._clipboard_watch
+
+    @property
+    def close_to_tray(self) -> bool:
+        return self._close_to_tray
 
     def _center_window(self, width: int, height: int) -> None:
         screen_w = self.winfo_screenwidth()
@@ -107,6 +147,88 @@ class IDMApp(tk.Tk):
             self.iconphoto(True, self._icon_photo)
         except tk.TclError:
             pass
+
+    # ------------------------------------------------------------------ tepsi
+    def _init_tray(self) -> None:
+        try:
+            self._tray = TrayIcon(
+                self._tray_action,
+                primary=self.theme.c("primary"),
+                foreground=self.theme.c("on_primary"),
+            )
+            if not self._tray.available:
+                self._tray = None
+                return
+            if not self._tray.start():
+                self._tray.stop()
+                self._tray = None
+        except Exception:
+            self._tray = None
+
+    def _tray_action(self, action: str) -> None:
+        try:
+            self._tray_actions.put_nowait(action)
+        except Exception:
+            pass
+
+    def _handle_tray_action(self, action: str) -> None:
+        if action == "toggle":
+            self._toggle_window()
+        elif action == "new":
+            self.restore_window()
+            self.open_new_download()
+        elif action == "pause_all":
+            self.pause_all()
+        elif action == "resume_all":
+            self.resume_all()
+        elif action == "quit":
+            self.quit_from_tray()
+
+    def minimize_to_tray(self) -> bool:
+        if self._tray is None or not self._tray.available:
+            if self._snackbar:
+                self._snackbar.show(tr("tray.unavailable"), duration=3200)
+            return False
+        self.withdraw()
+        self._hidden_to_tray = True
+        if not self._tray_notified:
+            self._tray_notified = True
+            self._tray.notify(APP_NAME, tr("tray.minimized"))
+        return True
+
+    def restore_window(self) -> None:
+        self._hidden_to_tray = False
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+        except tk.TclError:
+            pass
+
+    def _toggle_window(self) -> None:
+        if self._hidden_to_tray:
+            self.restore_window()
+        else:
+            self.minimize_to_tray()
+
+    def quit_from_tray(self) -> None:
+        self._force_quit = True
+        self.restore_window()
+        self._quit()
+
+    def pause_all(self) -> None:
+        for task in list(self._tasks.values()):
+            if task.status in ("downloading", "connecting", "retrying"):
+                task.pause()
+        if self._snackbar:
+            self._snackbar.show(tr("tray.pause_all"), duration=2200)
+
+    def resume_all(self) -> None:
+        for task in list(self._tasks.values()):
+            if task.status in ("paused", "error"):
+                task.resume()
+        if self._snackbar:
+            self._snackbar.show(tr("tray.resume_all"), duration=2200)
 
     # ------------------------------------------------------------------ durum
     def _load_state(self) -> None:
@@ -128,6 +250,14 @@ class IDMApp(tk.Tk):
         except (TypeError, ValueError):
             saved_connections = DEFAULT_CONNECTIONS
         self._connections = max(1, min(saved_connections, MAX_CONNECTIONS))
+        try:
+            saved_value = data.get("retries")
+            saved_retries = DEFAULT_RETRIES if saved_value is None else int(saved_value)
+        except (TypeError, ValueError):
+            saved_retries = DEFAULT_RETRIES
+        self._retries = max(0, min(saved_retries, MAX_RETRIES))
+        self._clipboard_watch = bool(data.get("clipboard_watch"))
+        self._close_to_tray = bool(data.get("close_to_tray", True))
         for entry in data.get("tasks") or []:
             if not isinstance(entry, dict):
                 continue
@@ -142,11 +272,14 @@ class IDMApp(tk.Tk):
 
     def _save_state(self) -> None:
         payload = {
-            "version": 1,
+            "version": 2,
             "theme": self.theme.mode,
             "language": get_language(),
             "download_dir": self._download_dir,
             "connections": self._connections,
+            "retries": self._retries,
+            "clipboard_watch": self._clipboard_watch,
+            "close_to_tray": self._close_to_tray,
             "tasks": [
                 task.to_dict()
                 for task in self._tasks.values()
@@ -237,6 +370,15 @@ class IDMApp(tk.Tk):
             footer, theme, "info", tr("app.about"),
             command=self.open_about, bg=bg, height=36,
         ).pack(fill="x", pady=(10, 0))
+        NavItem(
+            footer, theme, "settings", tr("action.settings"),
+            command=self.open_settings, bg=bg, height=36,
+        ).pack(fill="x", pady=(2, 0))
+        if self._tray is not None and self._tray.available:
+            NavItem(
+                footer, theme, "tray", tr("action.minimize_tray"),
+                command=self.minimize_to_tray, bg=bg, height=36,
+            ).pack(fill="x", pady=(2, 0))
 
         logo_row = tk.Frame(pad, bg=bg)
         logo_row.pack(side="top", fill="x")
@@ -325,6 +467,11 @@ class IDMApp(tk.Tk):
             bg=surface, tooltip=tr("app.language"),
         )
         self._language_button.pack(side="right", padx=(0, 4))
+        if self._tray is not None and self._tray.available:
+            IconButton(
+                actions, theme, "tray", command=self.minimize_to_tray,
+                bg=surface, tooltip=tr("action.minimize_tray"),
+            ).pack(side="right", padx=(0, 4))
 
         body = tk.Frame(parent, bg=surface)
         body.pack(fill="both", expand=True, padx=(30, 18), pady=(8, 20))
@@ -394,7 +541,7 @@ class IDMApp(tk.Tk):
         if self._filter == "completed":
             return status == "completed"
         if self._filter == "paused":
-            return status in ("paused", "error")
+            return status in PENDING_STATUSES
         return True
 
     def _render_list(self, reset_scroll: bool = False) -> None:
@@ -509,7 +656,7 @@ class IDMApp(tk.Tk):
         all_count = len(self._tasks)
         active = sum(1 for t in self._tasks.values() if t.status in ACTIVE_STATUSES)
         completed = sum(1 for t in self._tasks.values() if t.status == "completed")
-        paused = sum(1 for t in self._tasks.values() if t.status in ("paused", "error"))
+        paused = sum(1 for t in self._tasks.values() if t.status in PENDING_STATUSES)
         counts = {
             "all": all_count, "active": active,
             "completed": completed, "paused": paused,
@@ -538,7 +685,7 @@ class IDMApp(tk.Tk):
             parts.append(tr("subtitle.completed_files", count=count))
         elif self._filter == "paused":
             count = sum(
-                1 for t in self._tasks.values() if t.status in ("paused", "error")
+                1 for t in self._tasks.values() if t.status in PENDING_STATUSES
             )
             parts.append(tr("subtitle.pending_downloads", count=count))
         if speed > 0:
@@ -551,6 +698,10 @@ class IDMApp(tk.Tk):
     def _toggle_theme(self) -> None:
         self.theme.toggle()
         self._set_window_icon()
+        if self._tray is not None:
+            self._tray.set_theme(
+                self.theme.c("primary"), self.theme.c("on_primary"),
+            )
         self._save_state()
         self._build_ui()
         self._update_counts()
@@ -562,6 +713,8 @@ class IDMApp(tk.Tk):
             return
         set_language(code)
         self.title(tr("app.title", app=APP_NAME))
+        if self._tray is not None:
+            self._tray.refresh_text()
         self._save_state()
         self._build_ui()
         self._update_counts()
@@ -602,23 +755,65 @@ class IDMApp(tk.Tk):
         finally:
             menu.grab_release()
 
-    def open_new_download(self) -> None:
+    def open_new_download(self, initial_url: str = "") -> None:
         if self._dialog is not None:
             try:
                 if self._dialog.winfo_exists():
+                    if initial_url:
+                        self._dialog.url_entry.set(initial_url)
                     self._dialog.lift()
                     self._dialog.focus_force()
                     return
             except tk.TclError:
                 pass
             self._dialog = None
-        self._dialog = NewDownloadDialog(self)
+        self._dialog = NewDownloadDialog(self, initial_url=initial_url)
         self._dialog.bind(
             "<Destroy>", lambda event: self._clear_dialog(event.widget),
         )
 
     def open_about(self) -> None:
         AboutDialog(self)
+
+    def open_settings(self) -> None:
+        if self._settings_dialog is not None:
+            try:
+                if self._settings_dialog.winfo_exists():
+                    self._settings_dialog.lift()
+                    self._settings_dialog.focus_force()
+                    return
+            except tk.TclError:
+                pass
+            self._settings_dialog = None
+        self._settings_dialog = SettingsDialog(self)
+        self._settings_dialog.bind(
+            "<Destroy>", lambda event: self._clear_settings_dialog(event.widget),
+        )
+
+    def _clear_settings_dialog(self, widget: tk.Widget) -> None:
+        if widget is self._settings_dialog:
+            self._settings_dialog = None
+
+    def apply_settings(self, clipboard: bool, close_to_tray: bool,
+                       retries: int) -> None:
+        self._clipboard_watch = bool(clipboard)
+        self._close_to_tray = bool(close_to_tray)
+        self._retries = max(0, min(int(retries), MAX_RETRIES))
+        if self._clipboard_watch:
+            try:
+                self._last_clipboard = self.clipboard_get()
+            except tk.TclError:
+                self._last_clipboard = ""
+        self._save_state()
+        if self._snackbar:
+            self._snackbar.show(tr("settings.saved"), duration=2400)
+
+    def set_default_retries(self, retries: int) -> None:
+        value = max(0, min(int(retries), MAX_RETRIES))
+        if value == self._retries:
+            return
+        self._retries = value
+        self._save_state()
 
     def _clear_dialog(self, widget: tk.Widget) -> None:
         if widget is self._dialog:
@@ -649,7 +844,10 @@ class IDMApp(tk.Tk):
         task.callback = self._on_task_event
         task.name_in_use = self._filename_in_use
         self._tasks[task.id] = task
-        self._last_status[task.id] = "queued"
+        scheduled = task.scheduled_at > time.time()
+        if scheduled:
+            task.status = "scheduled"
+        self._last_status[task.id] = task.status
         self._download_dir = task.directory
         self._connections = task.connections
         if self._folder_nav is not None:
@@ -664,11 +862,18 @@ class IDMApp(tk.Tk):
         self._update_header()
         self._render_list(reset_scroll=True)
         if self._snackbar:
-            self._snackbar.show(
-                tr("snack.started"),
-                duration=3000,
-            )
-        task.start()
+            if scheduled:
+                self._snackbar.show(
+                    tr("snack.scheduled", when=format_schedule(task.scheduled_at)),
+                    duration=4000,
+                )
+            else:
+                self._snackbar.show(
+                    tr("snack.started"),
+                    duration=3000,
+                )
+        if not scheduled:
+            task.start()
 
     def cancel_task(self, task_id: str) -> None:
         task = self._tasks.get(task_id)
@@ -702,6 +907,15 @@ class IDMApp(tk.Tk):
     def _poll_queue(self) -> None:
         if self._closing:
             return
+        while True:
+            try:
+                action = self._tray_actions.get_nowait()
+            except queue.Empty:
+                break
+            self._handle_tray_action(action)
+        if self._closing:
+            return
+        self._check_scheduled()
         seen: set[str] = set()
         while True:
             try:
@@ -711,11 +925,49 @@ class IDMApp(tk.Tk):
             if task_id and task_id not in seen:
                 seen.add(task_id)
                 self._handle_task_event(task_id)
+        if self._closing:
+            return
         if seen:
             self._update_counts()
             self._update_header()
-        if not self._closing:
-            self._poll_after_id = self.after(140, self._poll_queue)
+        self._poll_after_id = self.after(140, self._poll_queue)
+
+    def _check_scheduled(self) -> None:
+        now = time.time()
+        for task in list(self._tasks.values()):
+            if task.status == "scheduled" and task.scheduled_at and task.scheduled_at <= now:
+                task.start()
+
+    def _poll_clipboard(self) -> None:
+        if self._closing:
+            return
+        if self._clipboard_watch:
+            text = ""
+            try:
+                text = self.clipboard_get().strip()
+            except tk.TclError:
+                text = ""
+            if text and text != self._last_clipboard:
+                self._last_clipboard = text
+                if self._looks_like_link(text):
+                    if self._snackbar:
+                        self._snackbar.show(
+                            tr("snack.clipboard"),
+                            action_text=tr("action.download"),
+                            action=lambda value=text: self.open_new_download(value),
+                            duration=6000,
+                        )
+        self._clipboard_after_id = self.after(1200, self._poll_clipboard)
+
+    @staticmethod
+    def _looks_like_link(text: str) -> bool:
+        text = (text or "").strip()
+        if not text or len(text) > 4096 or "\n" in text:
+            return False
+        lower = text.lower()
+        if lower.startswith(("http://", "https://", "ftp://", "ftps://")):
+            return True
+        return lower.endswith(".torrent") and os.path.isfile(text)
 
     def _handle_task_event(self, task_id: str) -> None:
         task = self._tasks.get(task_id)
@@ -769,6 +1021,15 @@ class IDMApp(tk.Tk):
     def _on_close(self) -> None:
         if self._closing:
             return
+        if (not self._force_quit and self._close_to_tray
+                and self._tray is not None and self._tray.available):
+            if self.minimize_to_tray():
+                return
+        self._quit()
+
+    def _quit(self) -> None:
+        if self._closing:
+            return
         self._closing = True
         if self._poll_after_id:
             try:
@@ -776,8 +1037,20 @@ class IDMApp(tk.Tk):
             except tk.TclError:
                 pass
             self._poll_after_id = None
+        if self._clipboard_after_id:
+            try:
+                self.after_cancel(self._clipboard_after_id)
+            except tk.TclError:
+                pass
+            self._clipboard_after_id = None
         if self._snackbar is not None:
             self._snackbar.hide()
+        if self._tray is not None:
+            try:
+                self._tray.stop()
+            except Exception:
+                pass
+            self._tray = None
         self._save_state()
         self.destroy()
 

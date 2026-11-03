@@ -10,7 +10,7 @@
 
 <p align="center">
   <b>Material 3 görünümlü, çok bağlantılı masaüstü indirme yöneticisi</b><br>
-  Python 3.10+ · Tkinter · Sıfır harici bağımlılık · 16 dil
+  Python 3.10+ · Tkinter · Çekirdekte sıfır harici bağımlılık · 16 dil
 </p>
 
 <p align="center">
@@ -24,11 +24,12 @@
 <p align="center">
   IDM Studio; büyük dosyaları birden fazla bağlantıyla indiren, indirmeleri duraklatıp kaldığı yerden sürdürebilen
   ve tüm süreci canlı istatistiklerle gösteren bir masaüstü uygulamasıdır.<br>
-  Arayüzü Material Design 3 paletinden ilham alır; indirme motoru yalnızca Python standart kütüphanesini kullanır.
+  HTTP/HTTPS, FTP/FTPS, HLS ve BitTorrent kaynaklarını destekler; arayüzü Material Design 3 paletinden ilham alır.
 </p>
 
-> **Kısaca:** 1–10 arası eşzamanlı parça, güvenli duraklat/devam, otomatik kurtarma, açık/koyu tema,
-> 16 dilli arayüz ve hazır Linux paketleri.
+> **Kısaca:** 1–10 arası eşzamanlı parça, güvenli duraklat/devam, otomatik kurtarma, zamanlanmış indirmeler,
+> otomatik yeniden deneme, panodan bağlantı yakalama, sistem tepsisi, açık/koyu tema, 16 dilli arayüz
+> ve hazır Linux paketleri ile Windows çalıştırılabilir dosyası.
 
 ## İçindekiler
 
@@ -96,6 +97,21 @@
 - **Güvenli birleştirme:** Parçalar önce geçici bir dosyada birleştirilir, ardından `os.replace` ile hedefe taşınır. Böylece yarım kalan birleştirme mevcut dosyanızı bozmaz.
 - **Tek akışa geri dönüş:** Sunucu `Range` desteklemiyorsa veya dosya parçalamak için çok küçükse indirme tek bağlantıyla tamamlanır.
 - **Anlaşılır hatalar:** HTTP hataları, zaman aşımı, bağlantı kopması ve disk hataları kullanıcıya sade mesajlarla gösterilir; hatalı indirmeler kart üzerinden yeniden denenebilir.
+- **Otomatik yeniden deneme:** Yeni indirme penceresinde 0–10 arası deneme sayısı seçilebilir. Hata alan indirmeler artan bekleme süresiyle otomatik olarak yeniden denenir; kartta deneme sayısı gösterilir.
+
+### Kaynak protokolleri
+
+- **HTTP / HTTPS:** Çok parçalı, aralıklı ve kaldığı yerden devam eden indirme.
+- **FTP / FTPS:** `ftplib` ile kimlik doğrulamalı indirme; sunucu destekliyorsa `REST` komutuyla parçalı devam.
+- **HLS (.m3u8):** Master/medya oynatma listelerini çözer, göreli adresleri ve `EXT-X-MAP` başlangıç parçalarını işler, parçaları tek dosyada birleştirir.
+- **BitTorrent (.torrent):** Ek paket gerektirmeyen bencode, HTTP tracker, BEP 3 peer protokolü, SHA-1 parça doğrulaması ve çok dosyalı torrent desteği. Manyetik bağlantılar henüz desteklenmez.
+- **Video platformları:** İsteğe bağlı `yt-dlp` kurulumuyla YouTube, Vimeo ve benzeri sitelerden video indirme. Kurulu değilse uygulama açıklayıcı bir hata gösterir.
+
+### Zamanlama, pano ve sistem tepsisi
+
+- **Zamanlanmış indirme:** Başlangıç zamanı `YYYY-AA-GG SS:DD` veya yalnızca `SS:DD` biçiminde girilebilir; zamanı gelen indirmeler uygulama açıkken otomatik başlar.
+- **Panodan bağlantı yakalama:** Ayarlardan açıldığında panoya kopyalanan HTTP/HTTPS, FTP/FTPS veya `.torrent` yolu snackbar ile önerilir; otomatik indirme başlatılmaz.
+- **Sistem tepsisi:** Windows'ta ek paket olmadan Win32 `Shell_NotifyIcon` API'siyle çalışır. Pencere kapatıldığında indirmeler arka planda sürer; tepsi menüsünden göster/gizle, yeni indirme, tümünü duraklat/sürdür ve çıkış yapılabilir. Diğer platformlarda `pystray` + `Pillow` kuruluysa aynı işlevler kullanılabilir.
 
 ### Material 3 arayüz
 
@@ -110,12 +126,16 @@
 
 - **16 dilli arayüz:** Türkçe, İngilizce, Almanca, Fransızca, İtalyanca, Portekizce, İspanyolca, Azerice, Türkmence, Rusça, Ukraynaca, Fince, İsveççe, Japonca, Korece ve Çince. Dil, üst çubuktaki dünya simgesinden veya `Ctrl+L` ile değiştirilir.
 - **Sistem dilini algılama:** Kayıtlı bir tercih yoksa sistem yerel ayarına uygun dil seçilir.
-- **Hatırlanan tercihler:** Tema, dil, son kayıt klasörü ve parça sayısı `~/.config/idm-studio/state.json` içinde saklanır.
+- **Hatırlanan tercihler:** Tema, dil, son kayıt klasörü, parça sayısı, yeniden deneme sayısı, pano ve tepsi tercihleri `~/.config/idm-studio/state.json` içinde saklanır.
 - **Çevrimdışı çeviriler:** Tüm arayüz metinleri uygulamanın içine gömülüdür; sistemde ilgili dil paketi kurulu olmasa da arayüz eksiksiz görüntülenir.
 
 ## Hızlı başlangıç
 
-Tek gereksinim **Python 3.10+** ve **Tkinter**'dır. Harici Python paketi kurmanız gerekmez.
+Çekirdek için tek gereksinim **Python 3.10+** ve **Tkinter**'dır. Video platformları için isteğe bağlı
+`yt-dlp`, Windows dışında sistem tepsisi için isteğe bağlı `pystray` + `Pillow` kurabilirsiniz.
+Ayrı ses/video akışlarının birleştirilmesi gereken formatlarda sistemde **FFmpeg** bulunmalıdır.
+Windows'ta hazır `.exe` kullanacaksanız Python kurulumu gerekmez; [Windows (.exe)](#windows-exe)
+bölümüne bakın.
 
 ```bash
 cd internet-download-manager
@@ -148,7 +168,7 @@ chmod +x run.sh
 | Python | 3.10 veya üzeri |
 | Arayüz | Tkinter (Windows/macOS resmî Python kurulumlarıyla birlikte gelir) |
 | İşletim sistemi | Linux, Windows veya macOS |
-| Harici Python paketi | Yok |
+| Harici Python paketi | Çekirdek için yok. Video platformları için isteğe bağlı `yt-dlp`; Windows dışında sistem tepsisi için isteğe bağlı `pystray` + `Pillow`. |
 
 ### Linux'ta Tkinter
 
@@ -184,19 +204,19 @@ veya:
 python3 main.py
 ```
 
-### Hazır Linux paketleri
+### Linux paketleri
 
-Hazır çıktılar `dist/` klasöründe bulunur.
+Linux paketleri `packaging/` altındaki scriptlerle üretilir; üretilen çıktılar `dist/` klasörüne yazılır.
 
 | Paket | Dosya | Not |
 | --- | --- | --- |
-| Debian / Ubuntu | `dist/idm-studio_1.0.0_all.deb` | `python3-tk` ve `xdg-utils` bağımlılıklarını otomatik kurar, masaüstü menüsüne ekler. |
-| AppImage | `dist/IDM-Studio-1.0.0-x86_64.AppImage` | Python ve Tkinter çalışma zamanını içinde taşır; kurulum gerektirmez. |
+| Debian / Ubuntu | `dist/idm-studio_1.1.0_all.deb` | `python3-tk` ve `xdg-utils` bağımlılıklarını otomatik kurar, masaüstü menüsüne ekler; video platformları için `yt-dlp` önerilir. |
+| AppImage | `dist/IDM-Studio-1.1.0-x86_64.AppImage` | Python ve Tkinter çalışma zamanını içinde taşır; derleme sırasında kuruluysa `yt-dlp` ve Linux tepsisi için `pystray` + `Pillow` da paketlenir. Kurulum gerektirmez. |
 
 #### Debian / Ubuntu (.deb)
 
 ```bash
-sudo apt install ./dist/idm-studio_1.0.0_all.deb
+sudo apt install ./dist/idm-studio_1.1.0_all.deb
 idm-studio
 ```
 
@@ -205,21 +225,45 @@ Kurulumdan sonra uygulama, masaüstü menüsünde **IDM Studio** adıyla da gör
 #### AppImage
 
 ```bash
-chmod +x dist/IDM-Studio-1.0.0-x86_64.AppImage
-./dist/IDM-Studio-1.0.0-x86_64.AppImage
+chmod +x dist/IDM-Studio-1.1.0-x86_64.AppImage
+./dist/IDM-Studio-1.1.0-x86_64.AppImage
 ```
 
 Sistemde FUSE yoksa:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./dist/IDM-Studio-1.0.0-x86_64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./dist/IDM-Studio-1.1.0-x86_64.AppImage
 ```
 
-#### Paket bütünlüğünü doğrulama
+### Windows (.exe)
+
+`dist/` altındaki tek dosyalık Windows çalıştırılabilir dosyası Python ve Tkinter çalışma zamanını içerir; çalıştırmak için Python kurmanız gerekmez. Derleme sırasında `yt-dlp` kuruluysa video platformu desteği de gömülüdür. FFmpeg, ayrı ses/video akışlarının birleştirilmesi gereken formatlar için ayrıca `PATH` üzerinde bulunmalıdır.
+
+```powershell
+.\dist\IDM-Studio-1.1.0-windows-x86_64.exe
+```
+
+Yeniden derlemek için:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+```
+
+Derleme için Python 3.10+ ve PyInstaller gerekir; uygulama simgesi depoda hazırdır. İsteğe bağlı `yt-dlp` kuruluysa betik video desteğini otomatik olarak paketler; FFmpeg paketlenmez. Çıktı `dist/IDM-Studio-1.1.0-windows-x86_64.exe` olarak yazılır.
+
+### Paket bütünlüğünü doğrulama
+
+`SHA256SUMS` Linux paketlerini ve Windows `.exe` dosyasını kapsar.
 
 ```bash
 cd dist
 sha256sum -c SHA256SUMS
+```
+
+Windows'ta tek bir dosyanın özetini almak için:
+
+```powershell
+Get-FileHash .\dist\IDM-Studio-1.1.0-windows-x86_64.exe -Algorithm SHA256
 ```
 
 ## Kullanım
@@ -227,10 +271,11 @@ sha256sum -c SHA256SUMS
 ### İlk indirme
 
 1. Sağ üstteki **Yeni İndirme** düğmesine tıklayın (veya `Ctrl+N`).
-2. Bir `http://` veya `https://` bağlantısı yapıştırın. Şema yoksa `https://` otomatik eklenir.
-3. İsterseniz dosya adını ve kayıt klasörünü değiştirin.
-4. Parça sayısını seçin (1–10 arası; son seçim hatırlanır).
-5. **İndirmeyi Başlat**'a tıklayın.
+2. Bir `http://`, `https://`, `ftp://` veya `ftps://` bağlantısı, bir `.torrent` dosya yolu ya da HLS `.m3u8` adresi girin. Şema yoksa `https://` otomatik eklenir.
+3. Gerekirse **Kaynak türü**nü değiştirin; varsayılan **Otomatik algıla** seçeneği uzantıya ve şemaya göre karar verir.
+4. İsterseniz dosya adını ve kayıt klasörünü değiştirin.
+5. Parça sayısını (1–10), otomatik yeniden deneme sayısını (0–10) ve isteğe bağlı başlangıç zamanını seçin.
+6. **İndirmeyi Başlat**'a tıklayın. Zamanlanmış bir indirme, zamanı gelene kadar **Zamanlandı** durumunda bekler.
 
 ### İndirme kartı
 
@@ -238,8 +283,18 @@ sha256sum -c SHA256SUMS
 tamamlanan dosyanın klasörünü açabilir veya kaydı listeden kaldırabilirsiniz.
 Tamamlanmış bir karta çift tıklamak dosyayı varsayılan uygulamada açar.
 
-Hata durumunda kartta **Tekrar dene** düğmesi görünür. İptal edilen indirmelerin geçici
-parça dosyaları temizlenir; duraklatılan indirmelerin parçaları korunur.
+Hata durumunda kartta **Tekrar dene** düğmesi görünür. Otomatik yeniden deneme açıksa hata
+durumundaki indirme, deneme hakkı kaldığı sürece kendiliğinden sürer; kartta **Yeniden deneniyor**
+ve deneme sayısı görünür. İptal edilen indirmelerin geçici parça dosyaları temizlenir;
+duraklatılan indirmelerin parçaları korunur.
+
+### Ayarlar ve sistem tepsisi
+
+Sol alt köşedeki **Ayarlar** öğesinden panodan bağlantı yakalama, kapatınca sistem tepsisine
+küçültme ve varsayılan otomatik yeniden deneme sayısı değiştirilebilir. Üst çubuktaki tepsi
+simgesi veya **Sistem tepsisine küçült** öğesi pencereyi gizler; indirmeler arka planda devam eder.
+Tepsi menüsünden pencereyi geri açabilir, yeni indirme başlatabilir, tüm indirmeleri
+duraklatıp sürdürebilir veya uygulamadan çıkabilirsiniz.
 
 ### Dil ve tema
 
@@ -268,27 +323,31 @@ gösteren pencereyi açar.
 internet-download-manager/
 ├── main.py                  # Giriş noktası ve Tkinter kontrolü
 ├── idm_studio/
-│   ├── app.py               # Ana pencere, tema, filtreler, durum yönetimi
-│   ├── downloader.py        # Parçalı indirme motoru (thread + Range)
+│   ├── app.py               # Ana pencere, tema, filtreler, zamanlayıcı, tepsi
+│   ├── downloader.py        # HTTP/FTP/HLS/torrent indirme motoru ve yeniden deneme
+│   ├── torrent.py           # BitTorrent istemcisi (bencode, tracker, peer, parça doğrulama)
+│   ├── tray.py              # Win32 Shell_NotifyIcon ve isteğe bağlı pystray tepsisi
 │   ├── cards.py             # İndirme kartlarının Canvas çizimi
-│   ├── dialogs.py           # Yeni indirme ve hakkında diyalogları
+│   ├── dialogs.py           # Yeni indirme, ayarlar ve hakkında diyalogları
 │   ├── i18n.py              # 16 dilli arayüz metinleri ve dil seçimi
 │   ├── widgets.py           # Material buton, giriş alanı, snackbar, scrollbar…
 │   ├── draw.py              # Yuvarlatılmış şekiller ve vektörel ikonlar
 │   ├── theme.py             # Material 3 renk paleti ve fontlar
-│   ├── utils.py             # Biçimlendirme ve dosya yardımcıları
+│   ├── utils.py             # Biçimlendirme, zamanlama ve dosya yardımcıları
 │   └── __init__.py          # Sürüm bilgisi
 ├── packaging/
 │   ├── build_deb.sh         # Debian paketi üretimi
 │   ├── build_appimage.sh    # PyInstaller + AppImage üretimi
-│   ├── build_all.sh         # İki paketi birlikte üretir
+│   ├── build_all.sh         # Linux paketlerini ve varsa Windows özetini üretir
+│   ├── build_windows.ps1    # Windows tek dosya .exe üretimi
 │   ├── idm-studio.desktop   # Masaüstü kısayolu
 │   ├── idm-studio.svg       # Vektörel uygulama simgesi
-│   └── idm-studio-256.png   # PNG uygulama simgesi
+│   ├── idm-studio-256.png   # PNG uygulama simgesi
+│   └── idm-studio.ico       # Windows uygulama simgesi
 ├── docs/
 │   └── screenshots/         # Türkçe ve İngilizce README görselleri
-├── dist/                    # Üretilen .deb, AppImage ve SHA256SUMS
-├── requirements.txt         # Harici bağımlılık yok
+├── dist/                    # Üretilen .deb, AppImage, Windows .exe ve SHA256SUMS
+├── requirements.txt         # Çekirdek için harici bağımlılık yok; isteğe bağlı paketler
 ├── run.sh                   # Hızlı başlatma betiği
 ├── LICENSE                  # MIT lisansı
 ├── README.md                # Türkçe README
@@ -297,26 +356,32 @@ internet-download-manager/
 
 ## Nasıl çalışır?
 
-### 1. Sunucu keşfi
+### 1. Kaynak keşfi ve protokol seçimi
 
-İndirme motoru önce `HEAD` isteğiyle dosya boyutunu, dosya adını (`Content-Disposition`),
-içerik türünü ve yönlendirilmiş nihai URL'yi öğrenir. Ardından `Range: bytes=0-0` isteğiyle
-sunucunun gerçekten `206 Partial Content` döndürüp döndürmediğini doğrular. Bu sayede
-`Accept-Ranges` başlığına körü körüne güvenilmez.
+`DownloadTask`, URL şemasına ve uzantıya göre HTTP, FTP, HLS, BitTorrent veya video
+platformu modunu seçer. HTTP modunda önce `HEAD` isteğiyle dosya boyutu, dosya adı
+(`Content-Disposition`), içerik türü ve yönlendirilmiş nihai URL öğrenilir. Ardından
+`Range: bytes=0-0` isteğiyle sunucunun gerçekten `206 Partial Content` döndürüp
+döndürmediği doğrulanır. FTP modunda `SIZE` ve `REST`, HLS modunda oynatma listesi,
+BitTorrent modunda bencode ve tracker bilgileri kullanılır.
 
 ### 2. Parçalama ve indirme
 
-Sunucu aralıklı indirmeyi destekliyorsa ve dosya yeterince büyükse içerik, seçilen bağlantı
-sayısına göre en fazla 10 parçaya bölünür. Her parça kendi iş parçacığında `Range` başlığıyla
-indirilir ve 256 KB'lık parçalar hâlinde diske yazılır. Dosya 1 MB'ın altındaysa veya sunucu
-`Range` desteklemiyorsa tek akış kullanılır.
+HTTP/FTP sunucusu aralıklı indirmeyi destekliyorsa ve dosya yeterince büyükse içerik, seçilen
+bağlantı sayısına göre en fazla 10 parçaya bölünür. Her parça kendi iş parçacığında `Range`
+veya FTP `REST` ile indirilir ve 256 KB'lık parçalar hâlinde diske yazılır. HLS parçaları
+sırayla birleştirilir; BitTorrent'te parçalar SHA-1 ile doğrulanır ve eksik parçalar farklı
+eşlerden tamamlanır. Dosya 1 MB'ın altındaysa veya sunucu aralıklı indirmeyi desteklemiyorsa
+tek akış kullanılır.
 
-### 3. Duraklatma ve kurtarma
+### 3. Duraklatma, kurtarma ve yeniden deneme
 
 Her parça, indirme klasöründe `.idm-<görev-id>.part<N>` biçiminde saklanır. Duraklatıldığında
 bu dosyalar korunur; devam edildiğinde mevcut boyut okunur ve `Range: bytes=mevcut-...` ile
-kaldığı yerden sürdürülür. Uygulama kapanırsa görev listesi `state.json` içinden yüklenir ve
-yarım kalan indirmeler duraklatılmış durumda geri gelir.
+kaldığı yerden sürdürülür. BitTorrent'te parça durumu ayrıca `.torrent.state` dosyasına yazılır.
+Uygulama kapanırsa görev listesi `state.json` içinden yüklenir; yarım kalan indirmeler ve
+zamanlanmış görevler korunur. Otomatik yeniden deneme açıksa hatalı görevler artan bekleme
+süresiyle (1, 2, 4, … saniye, en fazla 15 saniye) yeniden denenir.
 
 ### 4. Birleştirme
 
@@ -327,14 +392,23 @@ kapanır veya iptal edilirse hedef dosya değişmez.
 ### 5. Arayüz ve kalıcılık
 
 Tüm ağ işlemleri arka plan iş parçacıklarında yapılır. Görevlerden gelen güncellemeler bir `queue`
-üzerinden ana Tkinter iş parçacığına aktarılır; böylece arayüz donmaz. İndirme listesi, tema, dil,
-son klasör ve parça sayısı atomik olarak `~/.config/idm-studio/state.json` dosyasına yazılır.
+üzerinden ana Tkinter iş parçacığına aktarılır; böylece arayüz donmaz. Tepsi işlemleri de aynı
+kuyruğa yazılır; tepsi iş parçacığı doğrudan Tkinter'a dokunmaz. İndirme listesi, tema, dil,
+son klasör, parça sayısı, yeniden deneme ve tepsi/pano tercihleri atomik olarak
+`~/.config/idm-studio/state.json` dosyasına yazılır.
 
-### 6. Bağımlılıksız yapı
+### 6. Bağımlılıksız çekirdek
 
-Projede üçüncü taraf Python paketi kullanılmaz. İndirme işlemleri `urllib`, `http.client` ve
-`threading`; arayüz ise yalnızca Tkinter ve standart kütüphane ile geliştirilmiştir.
-`requirements.txt` bu nedenle yalnızca bilgilendirme amaçlıdır.
+Çekirdek indirme motoru ve arayüz yalnızca Python standart kütüphanesini ve Tkinter'ı kullanır.
+FTP `ftplib`, HLS `urllib`, BitTorrent ise proje içindeki `torrent.py` modülüyle çalışır.
+İsteğe bağlı iki genişletme vardır:
+
+- Video platformu desteği için `pip install yt-dlp`
+- Windows dışında sistem tepsisi için `pip install pystray pillow`
+
+Bu paketler kurulu değilse uygulamanın geri kalanı sorunsuz çalışır; ilgili özellik
+açıklayıcı bir hata veya "tepsi kullanılamıyor" mesajı gösterir. `requirements.txt` bu nedenle
+yalnızca bilgilendirme amaçlıdır.
 
 ## Paket üretimi
 
@@ -344,20 +418,34 @@ Debian/Ubuntu derleme ortamında iki paketi birlikte üretmek için:
 ./packaging/build_all.sh
 ```
 
-Yalnızca bir paket üretmek için:
+Yalnızca bir Linux paketi üretmek için:
 
 ```bash
 ./packaging/build_deb.sh
 ./packaging/build_appimage.sh
 ```
 
+Windows için tek dosyalık `.exe` üretmek için:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+```
+
 - `.deb` paketi yalnızca `dpkg-deb` ile, root yetkisi gerektirmeden üretilir.
-- AppImage, PyInstaller ile Python/Tkinter çalışma zamanını paketler.
+- AppImage, PyInstaller ile Python/Tkinter çalışma zamanını paketler. Derleme ortamında `yt-dlp`
+  ve Linux tepsisi için `pystray` + `Pillow` kuruluysa bunlar da AppImage'a eklenir.
+- Windows derlemesi PyInstaller ile tek dosyalık `.exe` üretir; `yt-dlp` kuruluysa video desteği
+  paketlenir. FFmpeg telif ve boyut nedenleriyle paketlenmez; ayrıca kurulmalıdır.
+- Linux AppImage'a tepsi desteğini dahil etmek için derleme ortamında `pystray` + `Pillow` kurulu
+  olmalıdır. Başsız sunucularda `xvfb-run -a ./packaging/build_all.sh` kullanın; aksi halde
+  `pystray` paketlenmeyebilir.
 - Derleme sisteminde Tkinter veya PyInstaller yoksa `build_appimage.sh`, Debian/Ubuntu üzerinde
   gerekli paketleri `.build/` altına indirip yerel araç zinciri kurar; `sudo` gerekmez.
   İnternet bağlantısı gerekir veya `sudo apt install python3-tk pyinstaller` ile sistem kurulumu
-  yapılabilir.
-- Çıktılar ve SHA256 özetleri `dist/` altında oluşur.
+  yapılabilir. PyInstaller bazı Debian/Ubuntu sürümlerinde `libpython3.11` (veya sürüme uygun
+  `libpython3.12`) paketini de ister.
+- Çıktılar ve SHA256 özetleri `dist/` altında oluşur. Linux ve Windows çıktıları aynı `SHA256SUMS`
+  dosyasında listelenir.
 
 ## Sorun giderme
 
@@ -365,18 +453,30 @@ Yalnızca bir paket üretmek için:
 | --- | --- |
 | `ModuleNotFoundError: No module named 'tkinter'` | Dağıtımınıza uygun Tkinter paketini kurun: `sudo apt install python3-tk`, `sudo dnf install python3-tkinter` veya `sudo pacman -S tk`. |
 | `Grafik ekranı bulunamadı (DISPLAY değişkeni yok)` | Uygulamayı grafik masaüstü oturumunda çalıştırın; SSH kullanıyorsanız `ssh -X` veya `xvfb-run` deneyin. |
-| AppImage açılmıyor | Dosyaya çalıştırma izni verin: `chmod +x dist/IDM-Studio-1.0.0-x86_64.AppImage`. FUSE hatası varsa `APPIMAGE_EXTRACT_AND_RUN=1` ile başlatın. |
+| AppImage açılmıyor | Dosyaya çalıştırma izni verin: `chmod +x dist/IDM-Studio-1.1.0-x86_64.AppImage`. FUSE hatası varsa `APPIMAGE_EXTRACT_AND_RUN=1` ile başlatın. |
+| AppImage derlemesi `libpython3.11.so.1.0` bulamıyor | `sudo apt install libpython3.11` (Python sürümünüze göre `libpython3.12`) kurun ve derlemeyi yeniden çalıştırın. |
 | "Sunucu aralıklı indirmeyi desteklemiyor" | Parça sayısını 1 yaparak tek bağlantıyla indirin. Sunucu `Range` başlığını desteklemiyor olabilir. |
-| İndirme 0 B/s'de kalıyor | Sunucu bağlantıyı kapatmış veya ağ kesilmiş olabilir. Karttaki **Tekrar dene** düğmesini kullanın. |
+| İndirme 0 B/s'de kalıyor | Sunucu bağlantıyı kapatmış veya ağ kesilmiş olabilir. Karttaki **Tekrar dene** düğmesini kullanın veya otomatik yeniden denemeyi açın. |
+| Video platformu indirmiyor | `pip install yt-dlp` ile isteğe bağlı paketi kurun; ayrı ses/video birleştirmesi için FFmpeg'in PATH'te olduğundan emin olun. DRM korumalı yayınlar desteklenmez. |
+| Manyetik bağlantı çalışmıyor | Magnet bağlantıları henüz desteklenmez; bir `.torrent` dosyası veya `.torrent` HTTP(S) adresi kullanın. |
+| Torrent eş bulamıyor | Torrent'in aktif tracker'ları ve açık portları olduğundan emin olun. Güvenlik duvarı giden TCP bağlantılarını engelliyor olabilir. |
+| Sistem tepsisi görünmüyor | Windows'ta yerleşik destek vardır. Linux/macOS'ta `pip install pystray pillow` kurun; aksi halde pencere kapatınca uygulama tamamen kapanır. |
+| Windows `.exe` SmartScreen uyarısı veriyor | Dosya imzasız olduğu için Windows uyarabilir. **Daha fazla bilgi → Yine de çalıştır** seçeneğini kullanın veya uygulamayı kaynaktan çalıştırın. |
 | Ayarlar bozuldu / eski indirmeler görünmüyor | `~/.config/idm-studio/state.json` dosyasını yedekleyip silin; uygulama temiz bir durumla açılır. |
 
 ## Bilinen sınırlamalar
 
-- Yalnızca HTTP ve HTTPS desteklenir; FTP, BitTorrent veya video platformu entegrasyonu yoktur.
-- Tarayıcı eklentisi, panodan otomatik bağlantı yakalama veya zamanlanmış indirme özelliği yoktur.
-- Otomatik yeniden deneme yoktur; hatalı indirmeler kart üzerindeki **Tekrar dene** ile sürdürülür.
-- Hazır `.deb` ve AppImage paketleri Linux içindir. Windows ve macOS'ta uygulama kaynaktan
-  çalıştırılabilir; bu platformlar için hazır paket üretilmemiştir.
+- Tarayıcı eklentisi yoktur; bağlantılar panodan yakalanabilir veya elle girilebilir.
+- Manyetik bağlantılar (magnet) ve DHT/PEX desteklenmez; BitTorrent için `.torrent` dosyası gerekir. İndirme sonrası seeding yapılmaz.
+- BitTorrent istemcisi HTTP/HTTPS tracker'lar ve IPv4 eşlerle sınırlıdır; UDP tracker'lar, `peers6` ve eş şifrelemesi (MSE) desteklenmez.
+- HLS yayınlarında AES-128 şifreleme, `#EXT-X-BYTERANGE` bayt aralıkları, canlı liste yenileme ve alternatif ses parçaları desteklenmez; DRM korumalı içerikler de desteklenmez.
+- Video platformu entegrasyonu isteğe bağlı `yt-dlp` paketine bağlıdır; paket yoksa yalnızca HLS/doğrudan bağlantılar kullanılabilir.
+- FTP sunucusu `REST` komutunu desteklemiyorsa devam eden indirme parçalı olarak sürdürülemez; tek akışa dönülür. FTPS için açık (explicit, `AUTH TLS`) bağlantı desteklenir; örtük (implicit, port 990) FTPS desteklenmez.
+- Sistem tepsisi Windows'ta yerleşiktir. Linux ve macOS'ta `pystray` + `Pillow` gerekir; bu platformlarda tepsi davranışı masaüstü ortamına göre değişebilir.
+- Hazır `.deb` ve AppImage paketleri Linux, tek dosyalık `.exe` ise Windows içindir. macOS için hazır
+  paket yoktur; uygulama kaynaktan çalıştırılabilir.
+- Windows `.exe` imzasız olduğu için SmartScreen veya antivirüs uyarısı gösterebilir; kaynaktan
+  çalıştırma veya kendi derlemenizi kullanma seçenekleri vardır.
 - Arayüz Tkinter tabanlıdır; platformlar arasında küçük görsel farklılıklar görülebilir.
 
 ## Katkı

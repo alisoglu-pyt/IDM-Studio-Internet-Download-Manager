@@ -10,7 +10,7 @@
 
 <p align="center">
   <b>A Material 3-inspired, multi-connection desktop download manager</b><br>
-  Python 3.10+ · Tkinter · Zero third-party dependencies · 16 languages
+  Python 3.10+ · Tkinter · Zero third-party dependencies in the core · 16 languages
 </p>
 
 <p align="center">
@@ -24,11 +24,12 @@
 <p align="center">
   IDM Studio downloads large files over multiple connections, lets you pause and resume downloads exactly where
   they left off, and shows the whole process through live statistics.<br>
-  Its interface is inspired by the Material Design 3 palette; the download engine uses only the Python standard library.
+  It supports HTTP/HTTPS, FTP/FTPS, HLS, and BitTorrent sources, and its interface is inspired by Material Design 3.
 </p>
 
-> **In short:** 1–10 concurrent segments, safe pause/resume, automatic recovery, light/dark themes,
-> a 16-language interface, and ready-to-use Linux packages.
+> **In short:** 1–10 concurrent segments, safe pause/resume, automatic recovery, scheduled downloads,
+> automatic retry, clipboard link capture, system tray, light/dark themes, a 16-language interface,
+> ready-to-use Linux packages, and a Windows executable.
 
 ## Contents
 
@@ -96,6 +97,21 @@
 - **Safe merging:** Segments are merged into a temporary file first and then moved into place with `os.replace`, so an interrupted merge cannot corrupt an existing file.
 - **Single-stream fallback:** If the server does not support `Range` or the file is too small to split, the download completes over a single connection.
 - **Clear errors:** HTTP errors, timeouts, connection drops, and disk errors are shown as plain-language messages; failed downloads can be retried from the card.
+- **Automatic retry:** Choose 0–10 attempts in the new download dialog. Failed downloads are retried automatically with increasing backoff; the card shows the attempt count.
+
+### Source protocols
+
+- **HTTP / HTTPS:** Multi-part, ranged downloads with exact resume support.
+- **FTP / FTPS:** Authenticated downloads through `ftplib`, with segmented resume via the `REST` command when the server supports it.
+- **HLS (.m3u8):** Resolves master/media playlists, relative URLs, and `EXT-X-MAP` initialization segments, then merges the segments into one file.
+- **BitTorrent (.torrent):** Dependency-free bencode, HTTP tracker, BEP 3 peer protocol, SHA-1 piece verification, and multi-file torrent support. Magnet links are not supported yet.
+- **Video platforms:** Optional `yt-dlp` integration for YouTube, Vimeo, and similar sites. If it is not installed, the app shows a clear error.
+
+### Scheduling, clipboard, and system tray
+
+- **Scheduled downloads:** Enter a start time as `YYYY-MM-DD HH:MM` or just `HH:MM`; due downloads start automatically while the app is running.
+- **Clipboard link capture:** When enabled in Settings, HTTP/HTTPS, FTP/FTPS, or `.torrent` paths copied to the clipboard are offered through a snackbar; downloads never start automatically.
+- **System tray:** On Windows it uses the native Win32 `Shell_NotifyIcon` API with no extra packages. Closing the window keeps downloads running in the background; the tray menu can show/hide the window, start a new download, pause/resume all, and exit. On other platforms the same features work when `pystray` + `Pillow` are installed.
 
 ### Material 3 interface
 
@@ -110,12 +126,15 @@
 
 - **16-language interface:** Turkish, English, German, French, Italian, Portuguese, Spanish, Azerbaijani, Turkmen, Russian, Ukrainian, Finnish, Swedish, Japanese, Korean, and Chinese. Switch languages from the globe icon in the top bar or with `Ctrl+L`.
 - **System language detection:** If no preference has been saved yet, a supported language is selected from the system locale.
-- **Remembered preferences:** Theme, language, last save folder, and segment count are stored in `~/.config/idm-studio/state.json`.
+- **Remembered preferences:** Theme, language, last save folder, segment count, retry count, and clipboard/tray preferences are stored in `~/.config/idm-studio/state.json`.
 - **Offline translations:** All interface strings are embedded in the application, so the UI is complete even when the system does not have the matching locale installed.
 
 ## Quick start
 
-The only requirements are **Python 3.10+** and **Tkinter**. No third-party Python packages are needed.
+The core only requires **Python 3.10+** and **Tkinter**. You can optionally install `yt-dlp` for
+video platforms and `pystray` + `Pillow` for the system tray outside Windows. **FFmpeg** is required
+on the system for formats that need separate audio/video streams merged. If you use the ready-made
+Windows `.exe`, Python does not need to be installed; see [Windows (.exe)](#windows-exe).
 
 ```bash
 cd internet-download-manager
@@ -148,7 +167,7 @@ chmod +x run.sh
 | Python | 3.10 or newer |
 | GUI toolkit | Tkinter (bundled with official Windows/macOS Python installers) |
 | Operating system | Linux, Windows, or macOS |
-| Third-party Python packages | None |
+| Third-party Python packages | None for the core. Optional `yt-dlp` for video platforms; optional `pystray` + `Pillow` for the system tray outside Windows. |
 
 ### Tkinter on Linux
 
@@ -184,19 +203,19 @@ or:
 python3 main.py
 ```
 
-### Ready-made Linux packages
+### Linux packages
 
-Prebuilt packages are available in the `dist/` directory.
+Linux packages are produced with the scripts under `packaging/`; the generated outputs are written to `dist/`.
 
 | Package | File | Notes |
 | --- | --- | --- |
-| Debian / Ubuntu | `dist/idm-studio_1.0.0_all.deb` | Installs the `python3-tk` and `xdg-utils` dependencies automatically and adds a desktop menu entry. |
-| AppImage | `dist/IDM-Studio-1.0.0-x86_64.AppImage` | Bundles the Python and Tkinter runtime; no installation required. |
+| Debian / Ubuntu | `dist/idm-studio_1.1.0_all.deb` | Installs the `python3-tk` and `xdg-utils` dependencies automatically and adds a desktop menu entry; `yt-dlp` is recommended for video platforms. |
+| AppImage | `dist/IDM-Studio-1.1.0-x86_64.AppImage` | Bundles the Python and Tkinter runtime; when installed at build time, `yt-dlp` and `pystray` + `Pillow` for the Linux tray are bundled too. No installation required. |
 
 #### Debian / Ubuntu (.deb)
 
 ```bash
-sudo apt install ./dist/idm-studio_1.0.0_all.deb
+sudo apt install ./dist/idm-studio_1.1.0_all.deb
 idm-studio
 ```
 
@@ -205,21 +224,45 @@ After installation, the application also appears in the desktop menu as **IDM St
 #### AppImage
 
 ```bash
-chmod +x dist/IDM-Studio-1.0.0-x86_64.AppImage
-./dist/IDM-Studio-1.0.0-x86_64.AppImage
+chmod +x dist/IDM-Studio-1.1.0-x86_64.AppImage
+./dist/IDM-Studio-1.1.0-x86_64.AppImage
 ```
 
 If FUSE is not available:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./dist/IDM-Studio-1.0.0-x86_64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./dist/IDM-Studio-1.1.0-x86_64.AppImage
 ```
 
-#### Verify package integrity
+### Windows (.exe)
+
+The single-file Windows executable in `dist/` contains the Python and Tkinter runtime, so Python does not need to be installed to run it. If `yt-dlp` was installed at build time, video-platform support is embedded too. FFmpeg must still be available on `PATH` for formats that require separate audio/video streams to be merged.
+
+```powershell
+.\dist\IDM-Studio-1.1.0-windows-x86_64.exe
+```
+
+To rebuild it:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+```
+
+The build requires Python 3.10+ and PyInstaller; the application icon is included in the repository. If the optional `yt-dlp` package is installed, the script bundles video support automatically; FFmpeg is not bundled. The output is written to `dist/IDM-Studio-1.1.0-windows-x86_64.exe`.
+
+### Verify package integrity
+
+`SHA256SUMS` covers the Linux packages and the Windows `.exe`.
 
 ```bash
 cd dist
 sha256sum -c SHA256SUMS
+```
+
+To verify a single file on Windows:
+
+```powershell
+Get-FileHash .\dist\IDM-Studio-1.1.0-windows-x86_64.exe -Algorithm SHA256
 ```
 
 ## Usage
@@ -227,18 +270,27 @@ sha256sum -c SHA256SUMS
 ### Your first download
 
 1. Click **New Download** in the top-right corner (or press `Ctrl+N`).
-2. Paste an `http://` or `https://` link. If the scheme is missing, `https://` is added automatically.
-3. Optionally change the filename and save folder.
-4. Choose the number of segments (1–10; the last selection is remembered).
-5. Click **Start Download**.
+2. Paste an `http://`, `https://`, `ftp://`, or `ftps://` link, a `.torrent` file path, or an HLS `.m3u8` URL. If the scheme is missing, `https://` is added automatically.
+3. Change **Source type** if needed; the default **Auto detect** option decides from the scheme and extension.
+4. Optionally change the filename and save folder.
+5. Choose the number of segments (1–10), the automatic retry count (0–10), and an optional start time.
+6. Click **Start Download**. A scheduled download waits in the **Scheduled** state until its time arrives.
 
 ### Download card
 
 Use the buttons on a download card to pause, resume, cancel, open the folder of a completed file,
 or remove the entry from the list. Double-clicking a completed card opens the file with the default application.
 
-When a download fails, a **Retry** button appears on the card. Canceling a download removes its temporary
-part files; pausing a download keeps them for later.
+When a download fails, a **Retry** button appears on the card. If automatic retry is enabled, the task
+keeps retrying while attempts remain; the card shows **Retrying** and the attempt count. Canceling a
+download removes its temporary part files; pausing a download keeps them for later.
+
+### Settings and system tray
+
+Use **Settings** in the bottom-left corner to enable clipboard link capture, close-to-tray behavior,
+and the default automatic retry count. The tray icon in the top bar or **Minimize to system tray**
+hides the window while downloads continue in the background. The tray menu can restore the window,
+start a new download, pause/resume all downloads, or exit the app.
 
 ### Language and theme
 
@@ -267,27 +319,31 @@ and contact information.
 internet-download-manager/
 ├── main.py                  # Entry point and Tkinter check
 ├── idm_studio/
-│   ├── app.py               # Main window, theme, filters, state management
-│   ├── downloader.py        # Multi-part download engine (threads + Range)
+│   ├── app.py               # Main window, theme, filters, scheduler, tray lifecycle
+│   ├── downloader.py        # HTTP/FTP/HLS/torrent engine and retry logic
+│   ├── torrent.py           # BitTorrent client (bencode, tracker, peer, piece verification)
+│   ├── tray.py              # Win32 Shell_NotifyIcon and optional pystray tray
 │   ├── cards.py             # Canvas-rendered download cards
-│   ├── dialogs.py           # New download and about dialogs
+│   ├── dialogs.py           # New download, settings, and about dialogs
 │   ├── i18n.py              # Interface strings for 16 languages and language selection
 │   ├── widgets.py           # Material buttons, entries, snackbar, scrollbar…
 │   ├── draw.py              # Rounded shapes and vector icons
 │   ├── theme.py             # Material 3 color palette and fonts
-│   ├── utils.py             # Formatting and file helpers
+│   ├── utils.py             # Formatting, scheduling, and file helpers
 │   └── __init__.py          # Version information
 ├── packaging/
 │   ├── build_deb.sh         # Debian package build
 │   ├── build_appimage.sh    # PyInstaller + AppImage build
-│   ├── build_all.sh         # Builds both packages
+│   ├── build_all.sh         # Builds Linux packages and includes a Windows checksum if present
+│   ├── build_windows.ps1    # Single-file Windows .exe build
 │   ├── idm-studio.desktop   # Desktop shortcut
 │   ├── idm-studio.svg       # Vector application icon
-│   └── idm-studio-256.png   # PNG application icon
+│   ├── idm-studio-256.png   # PNG application icon
+│   └── idm-studio.ico       # Windows application icon
 ├── docs/
 │   └── screenshots/         # README screenshots (Turkish and English)
-├── dist/                    # Generated .deb, AppImage, and SHA256SUMS
-├── requirements.txt         # No third-party dependencies
+├── dist/                    # Generated .deb, AppImage, Windows .exe, and SHA256SUMS
+├── requirements.txt         # No core dependencies; optional packages are listed
 ├── run.sh                   # Quick launch script
 ├── LICENSE                  # MIT license
 ├── README.md                # Turkish README
@@ -296,24 +352,29 @@ internet-download-manager/
 
 ## How it works
 
-### 1. Server discovery
+### 1. Source discovery and protocol selection
 
-The engine first sends a `HEAD` request to learn the file size, filename (`Content-Disposition`),
-content type, and final redirected URL. It then sends a `Range: bytes=0-0` request to verify that the
-server really returns `206 Partial Content`. This avoids trusting the `Accept-Ranges` header blindly.
+`DownloadTask` selects HTTP, FTP, HLS, BitTorrent, or video-platform mode from the URL scheme and
+extension. In HTTP mode it first sends a `HEAD` request to learn the file size, filename
+(`Content-Disposition`), content type, and final redirected URL. It then sends `Range: bytes=0-0` to
+verify that the server really returns `206 Partial Content`. FTP mode uses `SIZE` and `REST`, HLS mode
+reads the playlist, and BitTorrent mode reads bencode and tracker metadata.
 
 ### 2. Splitting and downloading
 
-If the server supports ranged downloads and the file is large enough, the content is split into at most
-10 segments based on the selected connection count. Each segment is downloaded in its own thread with a
-`Range` header and written to disk in 256 KB chunks. Files under 1 MB, or servers without `Range` support,
-use a single stream.
+If the HTTP/FTP server supports ranged downloads and the file is large enough, the content is split into
+at most 10 segments based on the selected connection count. Each segment is downloaded in its own thread
+with `Range` or FTP `REST` and written to disk in 256 KB chunks. HLS segments are merged in order;
+BitTorrent pieces are verified with SHA-1 and missing pieces are fetched from other peers. Files under
+1 MB, or servers without ranged-download support, use a single stream.
 
-### 3. Pausing and recovery
+### 3. Pausing, recovery, and retry
 
 Each segment is stored in the download folder as `.idm-<task-id>.part<N>`. Pausing preserves these files;
-resuming reads the current size and continues with `Range: bytes=current-...`. If the app closes, the task
-list is restored from `state.json` and unfinished downloads come back paused.
+resuming reads the current size and continues with `Range: bytes=current-...`. BitTorrent additionally
+stores piece state in a `.torrent.state` file. If the app closes, the task list is restored from
+`state.json`; unfinished and scheduled tasks are preserved. When automatic retry is enabled, failed tasks
+are retried with increasing backoff (1, 2, 4, … seconds, capped at 15 seconds).
 
 ### 4. Merging
 
@@ -324,13 +385,21 @@ merging, the destination file is left untouched.
 ### 5. Interface and persistence
 
 All network operations run on background threads. Task updates reach the main Tkinter thread through a
-`queue`, so the interface never freezes. The download list, theme, language, last folder, and segment count
-are written atomically to `~/.config/idm-studio/state.json`.
+`queue`, so the interface never freezes. Tray actions are also queued; the tray thread never touches Tkinter
+directly. The download list, theme, language, last folder, segment count, retry count, and tray/clipboard
+preferences are written atomically to `~/.config/idm-studio/state.json`.
 
-### 6. Dependency-free design
+### 6. Dependency-free core
 
-The project uses no third-party Python packages. Downloads use `urllib`, `http.client`, and `threading`;
-the interface uses only Tkinter and the standard library. `requirements.txt` is therefore informational only.
+The core download engine and interface use only the Python standard library and Tkinter. FTP uses `ftplib`,
+HLS uses `urllib`, and BitTorrent is implemented in the bundled `torrent.py` module. Two optional
+extensions exist:
+
+- `pip install yt-dlp` for video-platform support
+- `pip install pystray pillow` for the system tray outside Windows
+
+If these packages are missing, the rest of the app works normally; the relevant feature shows a clear
+error or an "unavailable" message. `requirements.txt` is therefore informational only.
 
 ## Building packages
 
@@ -340,19 +409,32 @@ To build both packages on a Debian/Ubuntu build host:
 ./packaging/build_all.sh
 ```
 
-To build only one package:
+To build only one Linux package:
 
 ```bash
 ./packaging/build_deb.sh
 ./packaging/build_appimage.sh
 ```
 
+To build the single-file Windows `.exe`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+```
+
 - The `.deb` package is produced with `dpkg-deb` only and does not require root privileges.
-- The AppImage bundles the Python/Tkinter runtime using PyInstaller.
+- The AppImage bundles the Python/Tkinter runtime using PyInstaller. If `yt-dlp` and `pystray` + `Pillow`
+  for the Linux tray are installed on the build host, they are included as well.
+- The Windows build uses PyInstaller to produce a single `.exe`; `yt-dlp` is bundled when installed.
+  FFmpeg is not bundled because of size and licensing; install it separately.
+- To include Linux tray support in the AppImage, install `pystray` + `Pillow` on the build host. On headless
+  servers, use `xvfb-run -a ./packaging/build_all.sh`; otherwise `pystray` may be omitted.
 - If Tkinter or PyInstaller is missing on the build host, `build_appimage.sh` downloads the required packages
   into `.build/` and sets up a local toolchain on Debian/Ubuntu; no `sudo` is required. An internet connection
-  is needed, or you can install the system packages with `sudo apt install python3-tk pyinstaller`.
-- Outputs and SHA256 checksums are created under `dist/`.
+  is needed, or you can install the system packages with `sudo apt install python3-tk pyinstaller`. Some
+  Debian/Ubuntu releases also require `libpython3.11` (or the matching `libpython3.12`) for PyInstaller.
+- Outputs and SHA256 checksums are created under `dist/`. Linux and Windows outputs are listed in the same
+  `SHA256SUMS` file.
 
 ## Troubleshooting
 
@@ -360,18 +442,30 @@ To build only one package:
 | --- | --- |
 | `ModuleNotFoundError: No module named 'tkinter'` | Install the Tkinter package for your distribution: `sudo apt install python3-tk`, `sudo dnf install python3-tkinter`, or `sudo pacman -S tk`. |
 | `Grafik ekranı bulunamadı (DISPLAY değişkeni yok)` | Run the app in a graphical desktop session; when using SSH, try `ssh -X` or `xvfb-run`. |
-| AppImage will not start | Make the file executable: `chmod +x dist/IDM-Studio-1.0.0-x86_64.AppImage`. On FUSE errors, launch it with `APPIMAGE_EXTRACT_AND_RUN=1`. |
+| AppImage will not start | Make the file executable: `chmod +x dist/IDM-Studio-1.1.0-x86_64.AppImage`. On FUSE errors, launch it with `APPIMAGE_EXTRACT_AND_RUN=1`. |
+| AppImage build cannot find `libpython3.11.so.1.0` | Install `sudo apt install libpython3.11` (or `libpython3.12` for your Python version) and rerun the build. |
 | "The server does not support ranged downloads" | Set the segment count to 1 and download over a single connection. The server may not support the `Range` header. |
-| Download stays at 0 B/s | The server may have closed the connection or the network may be down. Use the **Retry** button on the card. |
+| Download stays at 0 B/s | The server may have closed the connection or the network may be down. Use the **Retry** button on the card or enable automatic retry. |
+| Video platform download fails | Install the optional package with `pip install yt-dlp` and make sure FFmpeg is on `PATH` for separate audio/video merging. DRM-protected streams are not supported. |
+| Magnet links do not work | Magnet links are not supported yet; use a `.torrent` file or a `.torrent` HTTP(S) URL. |
+| Torrent cannot find peers | Make sure the torrent has active trackers and open ports. A firewall may be blocking outbound TCP connections. |
+| System tray does not appear | Windows has built-in support. On Linux/macOS, install `pip install pystray pillow`; otherwise closing the window exits the app. |
+| Windows `.exe` triggers SmartScreen | The executable is unsigned, so Windows may warn. Choose **More info → Run anyway**, or run the application from source. |
 | Settings are corrupted / old downloads are missing | Back up and delete `~/.config/idm-studio/state.json`; the app will start with a clean state. |
 
 ## Known limitations
 
-- Only HTTP and HTTPS are supported; there is no FTP, BitTorrent, or video-platform integration.
-- There is no browser extension, clipboard link capture, or scheduled download feature.
-- Downloads are not retried automatically; failed downloads can be resumed with **Retry** on the card.
-- The ready-made `.deb` and AppImage packages target Linux. The application can run from source on Windows
-  and macOS, but no prebuilt packages are provided for those platforms.
+- There is no browser extension; links can be captured from the clipboard or entered manually.
+- Magnet links, DHT, and PEX are not supported; BitTorrent requires a `.torrent` file. No seeding is performed after a download completes.
+- The BitTorrent client is limited to HTTP/HTTPS trackers and IPv4 peers; UDP trackers, `peers6`, and peer wire encryption (MSE) are not supported.
+- AES-128 encrypted HLS streams, `#EXT-X-BYTERANGE` byte ranges, live playlist refresh, and alternate audio renditions are not supported; DRM-protected content is also unsupported.
+- Video-platform integration depends on the optional `yt-dlp` package; without it, only HLS/direct links are available.
+- If an FTP server does not support the `REST` command, a segmented download cannot resume; it falls back to a single stream. FTPS uses explicit (`AUTH TLS`) connections; implicit FTPS on port 990 is not supported.
+- The system tray is built in on Windows. Linux and macOS require `pystray` + `Pillow`, and tray behavior may vary by desktop environment.
+- The ready-made `.deb` and AppImage packages target Linux, while the single-file `.exe` targets Windows.
+  No prebuilt package is provided for macOS; the application can run from source there.
+- The Windows `.exe` is unsigned, so SmartScreen or antivirus software may show a warning. You can run the
+  application from source or build your own copy.
 - The interface is built with Tkinter, so small visual differences may appear across platforms.
 
 ## Contributing

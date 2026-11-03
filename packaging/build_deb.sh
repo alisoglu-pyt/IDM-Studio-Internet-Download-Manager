@@ -120,16 +120,19 @@ Architecture: $ARCH
 Maintainer: IDM Studio Developers <idm-studio@example.invalid>
 Installed-Size: $INSTALLED_SIZE
 Depends: python3 (>= 3.10), python3-tk, xdg-utils
+Recommends: yt-dlp
 Section: net
 Priority: optional
 Description: Material 3 internet download manager
  IDM Studio is a graphical download manager built with Python and Tkinter.
- It supports multi-segment HTTP/HTTPS downloads, pause and resume, live
- speed and progress reporting, light and dark Material 3 themes, and a
- user interface available in 16 languages.
+ It supports multi-segment HTTP/HTTPS, FTP/FTPS, HLS, and BitTorrent
+ downloads, pause and resume, automatic retry, scheduled downloads,
+ clipboard link capture, and a system tray. The interface has light and
+ dark Material 3 themes and is available in 16 languages.
  .
- The application keeps its download list in ~/.config/idm-studio and
- resumes unfinished downloads after a restart.
+ Video-platform support uses the optional yt-dlp package. The application
+ keeps its download list in ~/.config/idm-studio and resumes unfinished and
+ scheduled downloads after a restart.
 CONTROL
 
 (

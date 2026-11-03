@@ -145,6 +145,17 @@ fi
 echo "PyInstaller paketi oluşturuluyor…"
 rm -rf "$PYI_DIST" "$PYI_WORK" "$BUILD_ROOT/spec"
 mkdir -p "$PYI_DIST" "$PYI_WORK" "$BUILD_ROOT/spec"
+
+PYI_EXTRA_ARGS=()
+if env "${EXTRA_ENV[@]}" "$PYTHON" -c 'import yt_dlp' >/dev/null 2>&1; then
+    PYI_EXTRA_ARGS+=(--collect-all yt_dlp)
+    echo "yt-dlp bulundu; video platformu desteği paketlenecek."
+fi
+if env "${EXTRA_ENV[@]}" "$PYTHON" -c 'import pystray' >/dev/null 2>&1; then
+    PYI_EXTRA_ARGS+=(--collect-all pystray)
+    echo "pystray bulundu; Linux/macOS tepsi desteği paketlenecek."
+fi
+
 env "${EXTRA_ENV[@]}" "$PYTHON" -m PyInstaller \
     --noconfirm \
     --clean \
@@ -156,6 +167,8 @@ env "${EXTRA_ENV[@]}" "$PYTHON" -m PyInstaller \
     --workpath "$PYI_WORK" \
     --specpath "$BUILD_ROOT/spec" \
     --paths "$ROOT" \
+    --collect-submodules idm_studio \
+    "${PYI_EXTRA_ARGS[@]}" \
     "$ROOT/main.py"
 
 if [[ ! -x "$PYI_DIST/idm-studio/idm-studio" ]]; then

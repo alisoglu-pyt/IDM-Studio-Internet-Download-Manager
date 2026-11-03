@@ -170,6 +170,16 @@ class DownloadCard(tk.Canvas):
                 ("play", tr("action.resume"), self.task.resume),
                 ("trash", tr("action.cancel"), self._cancel),
             ]
+        if status == "scheduled":
+            return [
+                ("play", tr("action.start_now"), self.task.start),
+                ("trash", tr("action.cancel"), self._cancel),
+            ]
+        if status == "retrying":
+            return [
+                ("pause", tr("action.pause"), self.task.pause),
+                ("trash", tr("action.cancel"), self._cancel),
+            ]
         if status == "error":
             return [
                 ("refresh", tr("action.retry"), self.task.resume),
@@ -193,6 +203,10 @@ class DownloadCard(tk.Canvas):
             return "alert", theme.c("error_container"), theme.c("error")
         if status in ("paused", "pausing"):
             return "pause", theme.c("warning_container"), theme.c("warning")
+        if status == "scheduled":
+            return "clock", theme.c("warning_container"), theme.c("warning")
+        if status == "retrying":
+            return "refresh", theme.c("warning_container"), theme.c("warning")
         if status == "merging":
             return "download", theme.c("primary_container"), theme.c("primary")
         if status in ("canceling", "canceled"):
@@ -265,6 +279,8 @@ class DownloadCard(tk.Canvas):
             fill_color = theme.c("error")
         elif status in ("paused", "pausing"):
             fill_color = theme.c("warning")
+        elif status in ("scheduled", "retrying"):
+            fill_color = theme.c("warning")
         else:
             fill_color = theme.c("primary")
 
@@ -277,7 +293,7 @@ class DownloadCard(tk.Canvas):
                     self, track_x1, track_y, track_x1 + min(track_width, fill_width),
                     track_y + track_h, 4, fill=fill_color, outline="",
                 )
-        elif status in ("downloading", "connecting", "queued"):
+        elif status in ("downloading", "connecting", "queued", "scheduled", "retrying"):
             # Toplam boyut bilinmiyorsa hareketli bir parça gösterilir.
             phase = (time.monotonic() * 0.48) % 1.35 - 0.18
             segment = track_width * 0.32
@@ -288,7 +304,6 @@ class DownloadCard(tk.Canvas):
                     self, left, track_y, right, track_y + track_h, 4,
                     fill=fill_color, outline="",
                 )
-
         pct = percentage(task.downloaded, task.total) if task.total else 0
         percent_text = tr("percent", value=pct)
         if status in ("downloading", "connecting"):
@@ -317,6 +332,20 @@ class DownloadCard(tk.Canvas):
             left_color = theme.c("warning")
         elif status == "pausing":
             left_text = f"{tr('status.pausing')}…"
+            right_text = percent_text if task.total else ""
+            left_color = theme.c("warning")
+        elif status == "scheduled":
+            left_text = tr("status.scheduled")
+            right_text = tr("card.scheduled_for", when=format_when(task.scheduled_at))
+            left_color = theme.c("warning")
+        elif status == "retrying":
+            left_text = tr("status.retrying")
+            if task.max_retries:
+                left_text += " · " + tr(
+                    "card.retrying_count",
+                    count=task.retry_count,
+                    total=task.max_retries,
+                )
             right_text = percent_text if task.total else ""
             left_color = theme.c("warning")
         elif status == "completed":

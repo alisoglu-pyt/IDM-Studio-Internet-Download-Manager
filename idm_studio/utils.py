@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .i18n import month_names, tr
@@ -151,3 +151,45 @@ def shorten_path(path: str, max_length: int = 42) -> str:
     head = max_length // 2 - 1
     tail = max_length - head - 1
     return f"{path[:head]}…{path[-tail:]}"
+
+
+def parse_schedule(text: str) -> float:
+    """Kullanıcının girdiği zamanı epoch saniyesine çevirir.
+
+    Desteklenen biçimler: ``YYYY-AA-GG SS:DD``, ``GG.AA.YYYY SS:DD``,
+    ``GG/AA/YYYY SS:DD`` ve yalnızca ``SS:DD`` (bugün veya yarın).
+    Geçersiz girdide ``0.0`` döner.
+    """
+    text = (text or "").strip()
+    if not text:
+        return 0.0
+    now = datetime.now()
+    for pattern in (
+        "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S",
+        "%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(text, pattern).timestamp()
+        except ValueError:
+            continue
+    try:
+        clock = datetime.strptime(text, "%H:%M")
+    except ValueError:
+        return 0.0
+    candidate = now.replace(
+        hour=clock.hour, minute=clock.minute, second=0, microsecond=0,
+    )
+    if candidate <= now:
+        candidate += timedelta(days=1)
+    return candidate.timestamp()
+
+
+def format_schedule(timestamp: float) -> str:
+    if not timestamp:
+        return ""
+    try:
+        return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
+    except (OSError, OverflowError, ValueError):
+        return ""
+

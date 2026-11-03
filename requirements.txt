@@ -1,2 +1,9 @@
-# IDM Studio harici Python paketi kullanmaz.
+# IDM Studio çekirdeği harici Python paketi kullanmaz.
 # Gereken tek sistem bileşeni Tkinter'dır (README'ye bakın).
+#
+# İsteğe bağlı genişletmeler:
+#   pip install yt-dlp            # Video platformu (YouTube, Vimeo vb.) desteği
+#   pip install pystray pillow    # Windows dışında sistem tepsisi desteği
+#
+# Video platformlarında ayrı ses/video akışlarını birleştirmek için
+# sistemde FFmpeg bulunmalıdır (isteğe bağlı, yt-dlp tarafından kullanılır).

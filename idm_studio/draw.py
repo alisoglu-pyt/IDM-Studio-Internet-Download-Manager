@@ -185,6 +185,31 @@ def draw_icon(canvas: tk.Canvas, name: str, cx: float, cy: float, size: float,
                            outline=color, width=w, tags=tags)
         line(cx, cy - 0.18 * s, cx, cy, cx + 0.15 * s, cy + 0.08 * s)
 
+    elif name == "settings":
+        radius = 0.20 * s
+        canvas.create_oval(
+            cx - radius, cy - radius, cx + radius, cy + radius,
+            outline=color, width=w, tags=tags,
+        )
+        canvas.create_oval(
+            cx - 0.07 * s, cy - 0.07 * s, cx + 0.07 * s, cy + 0.07 * s,
+            outline=color, width=w, tags=tags,
+        )
+        for angle in range(0, 360, 60):
+            rad = math.radians(angle)
+            x1 = cx + math.cos(rad) * 0.25 * s
+            y1 = cy + math.sin(rad) * 0.25 * s
+            x2 = cx + math.cos(rad) * 0.35 * s
+            y2 = cy + math.sin(rad) * 0.35 * s
+            line(x1, y1, x2, y2)
+
+    elif name == "tray":
+        line(cx - 0.34 * s, cy + 0.12 * s, cx - 0.34 * s, cy + 0.28 * s,
+             cx + 0.34 * s, cy + 0.28 * s, cx + 0.34 * s, cy + 0.12 * s)
+        line(cx, cy - 0.34 * s, cx, cy + 0.02 * s)
+        line(cx - 0.17 * s, cy - 0.15 * s, cx, cy + 0.02 * s,
+             cx + 0.17 * s, cy - 0.15 * s)
+
     elif name == "file":
         canvas.create_line(
             cx - 0.24 * s, cy - 0.34 * s,
