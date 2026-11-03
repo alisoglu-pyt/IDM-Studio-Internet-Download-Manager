@@ -102,9 +102,9 @@
 ### Source protocols
 
 - **HTTP / HTTPS:** Multi-part, ranged downloads with exact resume support.
-- **FTP / FTPS:** Authenticated downloads through `ftplib`, with segmented resume via the `REST` command when the server supports it.
-- **HLS (.m3u8):** Resolves master/media playlists, relative URLs, and `EXT-X-MAP` initialization segments, then merges the segments into one file.
-- **BitTorrent (.torrent):** Dependency-free bencode, HTTP tracker, BEP 3 peer protocol, SHA-1 piece verification, and multi-file torrent support. Magnet links are not supported yet.
+- **FTP / FTPS:** Authenticated downloads through `ftplib`, with segmented resume via the `REST` command when the server supports it. Both explicit (`AUTH TLS`) and implicit (port 990) FTPS are supported.
+- **HLS (.m3u8):** Resolves master/media playlists, relative URLs, AES-128, `EXT-X-BYTERANGE`, `EXT-X-MAP`, live playlist refresh, and alternate audio renditions, then merges the result.
+- **BitTorrent (.torrent / magnet):** Dependency-free bencode, HTTP/HTTPS/UDP trackers, DHT, PEX, BEP 9 magnet metadata, MSE/PE peer encryption, IPv4/IPv6 peers, SHA-1 piece verification, multi-file torrents, and post-download seeding.
 - **Video platforms:** Optional `yt-dlp` integration for YouTube, Vimeo, and similar sites. If it is not installed, the app shows a clear error.
 
 ### Scheduling, clipboard, and system tray
@@ -132,7 +132,8 @@
 ## Quick start
 
 The core only requires **Python 3.10+** and **Tkinter**. You can optionally install `yt-dlp` for
-video platforms and `pystray` + `Pillow` for the system tray outside Windows. **FFmpeg** is required
+video platforms, `pystray` + `Pillow` for the system tray outside Windows, and `cryptography` to
+accelerate AES-128 HLS decryption (pure Python AES is used when it is absent). **FFmpeg** is required
 on the system for formats that need separate audio/video streams merged. If you use the ready-made
 Windows `.exe`, Python does not need to be installed; see [Windows (.exe)](#windows-exe).
 
@@ -250,9 +251,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 
 The build requires Python 3.10+ and PyInstaller; the application icon is included in the repository. If the optional `yt-dlp` package is installed, the script bundles video support automatically; FFmpeg is not bundled. The output is written to `dist/IDM-Studio-1.1.0-windows-x86_64.exe`.
 
+### macOS (.app / .dmg)
+
+PyInstaller can only produce macOS applications on macOS, so no prebuilt macOS package is included in the repository. On a Mac with Python 3.10+, Tkinter, and PyInstaller installed:
+
+```bash
+chmod +x packaging/build_macos.sh
+./packaging/build_macos.sh
+```
+
+The script writes `dist/IDM-Studio-1.1.0-macos-<arch>.app.zip` and `.dmg`; it bundles `yt-dlp`, `pystray`, and `Pillow` when they are installed. Because the app is unsigned/ad-hoc signed, Gatekeeper may warn on first launch; approve it with **System Settings → Privacy & Security → Open Anyway**.
+
 ### Verify package integrity
 
-`SHA256SUMS` covers the Linux packages and the Windows `.exe`.
+`SHA256SUMS` covers the Linux packages, the Windows `.exe`, and any macOS archives.
 
 ```bash
 cd dist
@@ -321,7 +333,8 @@ internet-download-manager/
 ├── idm_studio/
 │   ├── app.py               # Main window, theme, filters, scheduler, tray lifecycle
 │   ├── downloader.py        # HTTP/FTP/HLS/torrent engine and retry logic
-│   ├── torrent.py           # BitTorrent client (bencode, tracker, peer, piece verification)
+│   ├── torrent.py           # BitTorrent client (magnet, DHT, PEX, tracker, MSE, seeding)
+│   ├── hls.py               # HLS playlists, AES-128, byte ranges, live refresh
 │   ├── tray.py              # Win32 Shell_NotifyIcon and optional pystray tray
 │   ├── cards.py             # Canvas-rendered download cards
 │   ├── dialogs.py           # New download, settings, and about dialogs
@@ -334,8 +347,9 @@ internet-download-manager/
 ├── packaging/
 │   ├── build_deb.sh         # Debian package build
 │   ├── build_appimage.sh    # PyInstaller + AppImage build
-│   ├── build_all.sh         # Builds Linux packages and includes a Windows checksum if present
+│   ├── build_all.sh         # Builds Linux packages and includes Windows/macOS checksums if present
 │   ├── build_windows.ps1    # Single-file Windows .exe build
+│   ├── build_macos.sh       # macOS .app and .dmg build (macOS only)
 │   ├── idm-studio.desktop   # Desktop shortcut
 │   ├── idm-studio.svg       # Vector application icon
 │   ├── idm-studio-256.png   # PNG application icon
@@ -422,6 +436,12 @@ To build the single-file Windows `.exe`:
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 ```
 
+To build the macOS `.app` and `.dmg` (macOS only):
+
+```bash
+./packaging/build_macos.sh
+```
+
 - The `.deb` package is produced with `dpkg-deb` only and does not require root privileges.
 - The AppImage bundles the Python/Tkinter runtime using PyInstaller. If `yt-dlp` and `pystray` + `Pillow`
   for the Linux tray are installed on the build host, they are included as well.
@@ -433,8 +453,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
   into `.build/` and sets up a local toolchain on Debian/Ubuntu; no `sudo` is required. An internet connection
   is needed, or you can install the system packages with `sudo apt install python3-tk pyinstaller`. Some
   Debian/Ubuntu releases also require `libpython3.11` (or the matching `libpython3.12`) for PyInstaller.
-- Outputs and SHA256 checksums are created under `dist/`. Linux and Windows outputs are listed in the same
-  `SHA256SUMS` file.
+- The macOS build runs only on macOS; PyInstaller cannot cross-compile applications. Outputs are written as
+  `dist/IDM-Studio-<version>-macos-<arch>.app.zip` and `.dmg`.
+- Outputs and SHA256 checksums are created under `dist/`. Linux, Windows, and any macOS outputs are listed
+  in the same `SHA256SUMS` file.
 
 ## Troubleshooting
 
@@ -444,10 +466,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 | `Grafik ekranı bulunamadı (DISPLAY değişkeni yok)` | Run the app in a graphical desktop session; when using SSH, try `ssh -X` or `xvfb-run`. |
 | AppImage will not start | Make the file executable: `chmod +x dist/IDM-Studio-1.1.0-x86_64.AppImage`. On FUSE errors, launch it with `APPIMAGE_EXTRACT_AND_RUN=1`. |
 | AppImage build cannot find `libpython3.11.so.1.0` | Install `sudo apt install libpython3.11` (or `libpython3.12` for your Python version) and rerun the build. |
+| AppImage build says `objdump is required` | Install `sudo apt install binutils` and rerun the build. |
 | "The server does not support ranged downloads" | Set the segment count to 1 and download over a single connection. The server may not support the `Range` header. |
 | Download stays at 0 B/s | The server may have closed the connection or the network may be down. Use the **Retry** button on the card or enable automatic retry. |
 | Video platform download fails | Install the optional package with `pip install yt-dlp` and make sure FFmpeg is on `PATH` for separate audio/video merging. DRM-protected streams are not supported. |
-| Magnet links do not work | Magnet links are not supported yet; use a `.torrent` file or a `.torrent` HTTP(S) URL. |
+| Magnet links do not work | Check that the link has a valid `xt=urn:btih:` value and that a tracker or DHT node is reachable; if metadata cannot be fetched, use a `.torrent` file or HTTP(S) URL. |
 | Torrent cannot find peers | Make sure the torrent has active trackers and open ports. A firewall may be blocking outbound TCP connections. |
 | System tray does not appear | Windows has built-in support. On Linux/macOS, install `pip install pystray pillow`; otherwise closing the window exits the app. |
 | Windows `.exe` triggers SmartScreen | The executable is unsigned, so Windows may warn. Choose **More info → Run anyway**, or run the application from source. |
@@ -456,14 +479,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 ## Known limitations
 
 - There is no browser extension; links can be captured from the clipboard or entered manually.
-- Magnet links, DHT, and PEX are not supported; BitTorrent requires a `.torrent` file. No seeding is performed after a download completes.
-- The BitTorrent client is limited to HTTP/HTTPS trackers and IPv4 peers; UDP trackers, `peers6`, and peer wire encryption (MSE) are not supported.
-- AES-128 encrypted HLS streams, `#EXT-X-BYTERANGE` byte ranges, live playlist refresh, and alternate audio renditions are not supported; DRM-protected content is also unsupported.
+- Magnet links, DHT, PEX, and post-download seeding are supported. Each task seeds for 60 seconds by default; pause or cancel ends seeding early.
+- The BitTorrent client supports HTTP/HTTPS/UDP trackers, `peers6` (IPv6) peers, and MSE/PE peer encryption. DHT and PEX are disabled for private torrents.
+- HLS supports AES-128, `#EXT-X-BYTERANGE`, live playlist refresh, and alternate audio renditions. DRM and `SAMPLE-AES`/`KEYFORMAT` content are unsupported. Merging alternate audio into one file requires FFmpeg; without it, video and audio are saved as separate files.
 - Video-platform integration depends on the optional `yt-dlp` package; without it, only HLS/direct links are available.
-- If an FTP server does not support the `REST` command, a segmented download cannot resume; it falls back to a single stream. FTPS uses explicit (`AUTH TLS`) connections; implicit FTPS on port 990 is not supported.
+- If an FTP server does not support the `REST` command, the client falls back to a single stream and re-reads from the start to finish a resumed download. Both explicit (`AUTH TLS`) and implicit (port 990) FTPS are supported.
 - The system tray is built in on Windows. Linux and macOS require `pystray` + `Pillow`, and tray behavior may vary by desktop environment.
 - The ready-made `.deb` and AppImage packages target Linux, while the single-file `.exe` targets Windows.
-  No prebuilt package is provided for macOS; the application can run from source there.
+  A macOS `.app`/`.dmg` can only be produced on a Mac with `packaging/build_macos.sh`; no prebuilt macOS package is included.
 - The Windows `.exe` is unsigned, so SmartScreen or antivirus software may show a warning. You can run the
   application from source or build your own copy.
 - The interface is built with Tkinter, so small visual differences may appear across platforms.

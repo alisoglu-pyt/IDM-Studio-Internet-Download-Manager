@@ -102,9 +102,9 @@
 ### Kaynak protokolleri
 
 - **HTTP / HTTPS:** Çok parçalı, aralıklı ve kaldığı yerden devam eden indirme.
-- **FTP / FTPS:** `ftplib` ile kimlik doğrulamalı indirme; sunucu destekliyorsa `REST` komutuyla parçalı devam.
-- **HLS (.m3u8):** Master/medya oynatma listelerini çözer, göreli adresleri ve `EXT-X-MAP` başlangıç parçalarını işler, parçaları tek dosyada birleştirir.
-- **BitTorrent (.torrent):** Ek paket gerektirmeyen bencode, HTTP tracker, BEP 3 peer protokolü, SHA-1 parça doğrulaması ve çok dosyalı torrent desteği. Manyetik bağlantılar henüz desteklenmez.
+- **FTP / FTPS:** `ftplib` ile kimlik doğrulamalı indirme; sunucu destekliyorsa `REST` komutuyla parçalı devam. Açık (`AUTH TLS`) ve örtük (port 990) FTPS desteklenir.
+- **HLS (.m3u8):** Master/medya oynatma listelerini çözer; AES-128, `EXT-X-BYTERANGE`, `EXT-X-MAP`, canlı liste yenileme ve alternatif ses parçalarını işler; parçaları tek dosyada birleştirir.
+- **BitTorrent (.torrent / magnet):** Ek paket gerektirmeyen bencode, HTTP/HTTPS/UDP tracker, DHT, PEX, BEP 9 magnet meta verisi, MSE/PE eş şifrelemesi, IPv4/IPv6 eşler, SHA-1 parça doğrulaması, çok dosyalı torrent desteği ve indirme sonrası seeding.
 - **Video platformları:** İsteğe bağlı `yt-dlp` kurulumuyla YouTube, Vimeo ve benzeri sitelerden video indirme. Kurulu değilse uygulama açıklayıcı bir hata gösterir.
 
 ### Zamanlama, pano ve sistem tepsisi
@@ -132,7 +132,8 @@
 ## Hızlı başlangıç
 
 Çekirdek için tek gereksinim **Python 3.10+** ve **Tkinter**'dır. Video platformları için isteğe bağlı
-`yt-dlp`, Windows dışında sistem tepsisi için isteğe bağlı `pystray` + `Pillow` kurabilirsiniz.
+`yt-dlp`, Windows dışında sistem tepsisi için isteğe bağlı `pystray` + `Pillow`, AES-128 HLS çözümünü
+hızlandırmak için isteğe bağlı `cryptography` kurabilirsiniz (paket yoksa saf Python AES kullanılır).
 Ayrı ses/video akışlarının birleştirilmesi gereken formatlarda sistemde **FFmpeg** bulunmalıdır.
 Windows'ta hazır `.exe` kullanacaksanız Python kurulumu gerekmez; [Windows (.exe)](#windows-exe)
 bölümüne bakın.
@@ -251,9 +252,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 
 Derleme için Python 3.10+ ve PyInstaller gerekir; uygulama simgesi depoda hazırdır. İsteğe bağlı `yt-dlp` kuruluysa betik video desteğini otomatik olarak paketler; FFmpeg paketlenmez. Çıktı `dist/IDM-Studio-1.1.0-windows-x86_64.exe` olarak yazılır.
 
+### macOS (.app / .dmg)
+
+PyInstaller macOS uygulamalarını yalnızca macOS üzerinde üretebildiği için depoda hazır macOS paketi yer almaz. Bir Mac'te Python 3.10+, Tkinter ve PyInstaller kuruluysa:
+
+```bash
+chmod +x packaging/build_macos.sh
+./packaging/build_macos.sh
+```
+
+Betik `dist/IDM-Studio-1.1.0-macos-<mimari>.app.zip` ve `.dmg` dosyalarını üretir; `yt-dlp`, `pystray` ve `Pillow` kuruluysa bunları da paketler. İmzasız/geçici imzalı olduğu için ilk açılışta Gatekeeper uyarısı çıkabilir; **Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç** ile onaylayın.
+
 ### Paket bütünlüğünü doğrulama
 
-`SHA256SUMS` Linux paketlerini ve Windows `.exe` dosyasını kapsar.
+`SHA256SUMS` Linux paketlerini, Windows `.exe` dosyasını ve varsa macOS arşivlerini kapsar.
 
 ```bash
 cd dist
@@ -325,7 +337,8 @@ internet-download-manager/
 ├── idm_studio/
 │   ├── app.py               # Ana pencere, tema, filtreler, zamanlayıcı, tepsi
 │   ├── downloader.py        # HTTP/FTP/HLS/torrent indirme motoru ve yeniden deneme
-│   ├── torrent.py           # BitTorrent istemcisi (bencode, tracker, peer, parça doğrulama)
+│   ├── torrent.py           # BitTorrent istemcisi (magnet, DHT, PEX, tracker, MSE, seeding)
+│   ├── hls.py               # HLS listeleri, AES-128, byterange ve canlı yenileme
 │   ├── tray.py              # Win32 Shell_NotifyIcon ve isteğe bağlı pystray tepsisi
 │   ├── cards.py             # İndirme kartlarının Canvas çizimi
 │   ├── dialogs.py           # Yeni indirme, ayarlar ve hakkında diyalogları
@@ -338,8 +351,9 @@ internet-download-manager/
 ├── packaging/
 │   ├── build_deb.sh         # Debian paketi üretimi
 │   ├── build_appimage.sh    # PyInstaller + AppImage üretimi
-│   ├── build_all.sh         # Linux paketlerini ve varsa Windows özetini üretir
+│   ├── build_all.sh         # Linux paketlerini ve varsa Windows/macOS özetini üretir
 │   ├── build_windows.ps1    # Windows tek dosya .exe üretimi
+│   ├── build_macos.sh       # macOS .app ve .dmg üretimi (yalnızca macOS)
 │   ├── idm-studio.desktop   # Masaüstü kısayolu
 │   ├── idm-studio.svg       # Vektörel uygulama simgesi
 │   ├── idm-studio-256.png   # PNG uygulama simgesi
@@ -431,6 +445,12 @@ Windows için tek dosyalık `.exe` üretmek için:
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 ```
 
+macOS `.app` ve `.dmg` üretmek için (yalnızca Mac üzerinde):
+
+```bash
+./packaging/build_macos.sh
+```
+
 - `.deb` paketi yalnızca `dpkg-deb` ile, root yetkisi gerektirmeden üretilir.
 - AppImage, PyInstaller ile Python/Tkinter çalışma zamanını paketler. Derleme ortamında `yt-dlp`
   ve Linux tepsisi için `pystray` + `Pillow` kuruluysa bunlar da AppImage'a eklenir.
@@ -444,6 +464,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
   İnternet bağlantısı gerekir veya `sudo apt install python3-tk pyinstaller` ile sistem kurulumu
   yapılabilir. PyInstaller bazı Debian/Ubuntu sürümlerinde `libpython3.11` (veya sürüme uygun
   `libpython3.12`) paketini de ister.
+- macOS derlemesi yalnızca macOS üzerinde çalışır; PyInstaller platformlar arası uygulama üretemez.
+  Çıktılar `dist/IDM-Studio-<sürüm>-macos-<mimari>.app.zip` ve `.dmg` olarak yazılır.
 - Çıktılar ve SHA256 özetleri `dist/` altında oluşur. Linux ve Windows çıktıları aynı `SHA256SUMS`
   dosyasında listelenir.
 
@@ -455,10 +477,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 | `Grafik ekranı bulunamadı (DISPLAY değişkeni yok)` | Uygulamayı grafik masaüstü oturumunda çalıştırın; SSH kullanıyorsanız `ssh -X` veya `xvfb-run` deneyin. |
 | AppImage açılmıyor | Dosyaya çalıştırma izni verin: `chmod +x dist/IDM-Studio-1.1.0-x86_64.AppImage`. FUSE hatası varsa `APPIMAGE_EXTRACT_AND_RUN=1` ile başlatın. |
 | AppImage derlemesi `libpython3.11.so.1.0` bulamıyor | `sudo apt install libpython3.11` (Python sürümünüze göre `libpython3.12`) kurun ve derlemeyi yeniden çalıştırın. |
+| AppImage derlemesi `objdump is required` diyor | `sudo apt install binutils` kurun ve derlemeyi yeniden çalıştırın. |
 | "Sunucu aralıklı indirmeyi desteklemiyor" | Parça sayısını 1 yaparak tek bağlantıyla indirin. Sunucu `Range` başlığını desteklemiyor olabilir. |
 | İndirme 0 B/s'de kalıyor | Sunucu bağlantıyı kapatmış veya ağ kesilmiş olabilir. Karttaki **Tekrar dene** düğmesini kullanın veya otomatik yeniden denemeyi açın. |
 | Video platformu indirmiyor | `pip install yt-dlp` ile isteğe bağlı paketi kurun; ayrı ses/video birleştirmesi için FFmpeg'in PATH'te olduğundan emin olun. DRM korumalı yayınlar desteklenmez. |
-| Manyetik bağlantı çalışmıyor | Magnet bağlantıları henüz desteklenmez; bir `.torrent` dosyası veya `.torrent` HTTP(S) adresi kullanın. |
+| Manyetik bağlantı çalışmıyor | Magnet bağlantısında geçerli bir `xt=urn:btih:` bilgisi ve erişilebilir tracker/DHT düğümü olduğundan emin olun; meta veri alınamazsa bir `.torrent` dosyası veya HTTP(S) adresi kullanın. |
 | Torrent eş bulamıyor | Torrent'in aktif tracker'ları ve açık portları olduğundan emin olun. Güvenlik duvarı giden TCP bağlantılarını engelliyor olabilir. |
 | Sistem tepsisi görünmüyor | Windows'ta yerleşik destek vardır. Linux/macOS'ta `pip install pystray pillow` kurun; aksi halde pencere kapatınca uygulama tamamen kapanır. |
 | Windows `.exe` SmartScreen uyarısı veriyor | Dosya imzasız olduğu için Windows uyarabilir. **Daha fazla bilgi → Yine de çalıştır** seçeneğini kullanın veya uygulamayı kaynaktan çalıştırın. |
@@ -467,14 +490,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 ## Bilinen sınırlamalar
 
 - Tarayıcı eklentisi yoktur; bağlantılar panodan yakalanabilir veya elle girilebilir.
-- Manyetik bağlantılar (magnet) ve DHT/PEX desteklenmez; BitTorrent için `.torrent` dosyası gerekir. İndirme sonrası seeding yapılmaz.
-- BitTorrent istemcisi HTTP/HTTPS tracker'lar ve IPv4 eşlerle sınırlıdır; UDP tracker'lar, `peers6` ve eş şifrelemesi (MSE) desteklenmez.
-- HLS yayınlarında AES-128 şifreleme, `#EXT-X-BYTERANGE` bayt aralıkları, canlı liste yenileme ve alternatif ses parçaları desteklenmez; DRM korumalı içerikler de desteklenmez.
+- Manyetik bağlantılar, DHT, PEX ve indirme sonrası seeding desteklenir; seeding süresi görev başına 60 saniyedir ve duraklatma/iptal ile kesilebilir.
+- BitTorrent istemcisi HTTP/HTTPS/UDP tracker'ları, `peers6` (IPv6) eşlerini ve MSE/PE eş şifrelemesini destekler. Özel (private) torrent'lerde DHT/PEX devre dışı bırakılır.
+- HLS'de AES-128, `#EXT-X-BYTERANGE`, canlı liste yenileme ve alternatif ses parçaları desteklenir. DRM, `SAMPLE-AES`/`KEYFORMAT` ile korunan içerikler desteklenmez. Alternatif sesi tek dosyada birleştirmek için FFmpeg gerekir; FFmpeg yoksa video ve ses ayrı dosyalar olarak kaydedilir.
 - Video platformu entegrasyonu isteğe bağlı `yt-dlp` paketine bağlıdır; paket yoksa yalnızca HLS/doğrudan bağlantılar kullanılabilir.
-- FTP sunucusu `REST` komutunu desteklemiyorsa devam eden indirme parçalı olarak sürdürülemez; tek akışa dönülür. FTPS için açık (explicit, `AUTH TLS`) bağlantı desteklenir; örtük (implicit, port 990) FTPS desteklenmez.
+- FTP sunucusu `REST` komutunu desteklemiyorsa tek akışa dönülür; devam eden indirme, dosyanın başından itibaren yeniden okunarak tamamlanır. Açık (`AUTH TLS`) ve örtük (port 990) FTPS desteklenir.
 - Sistem tepsisi Windows'ta yerleşiktir. Linux ve macOS'ta `pystray` + `Pillow` gerekir; bu platformlarda tepsi davranışı masaüstü ortamına göre değişebilir.
-- Hazır `.deb` ve AppImage paketleri Linux, tek dosyalık `.exe` ise Windows içindir. macOS için hazır
-  paket yoktur; uygulama kaynaktan çalıştırılabilir.
+- Hazır `.deb` ve AppImage paketleri Linux, tek dosyalık `.exe` ise Windows içindir. macOS `.app`/`.dmg`
+  paketi `packaging/build_macos.sh` ile yalnızca bir Mac üzerinde üretilebilir; depoda hazır macOS paketi yoktur.
 - Windows `.exe` imzasız olduğu için SmartScreen veya antivirüs uyarısı gösterebilir; kaynaktan
   çalıştırma veya kendi derlemenizi kullanma seçenekleri vardır.
 - Arayüz Tkinter tabanlıdır; platformlar arasında küçük görsel farklılıklar görülebilir.
