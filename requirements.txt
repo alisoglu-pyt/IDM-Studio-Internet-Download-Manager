@@ -4,6 +4,7 @@
 # İsteğe bağlı genişletmeler:
 #   pip install yt-dlp            # Video platformu (YouTube, Vimeo vb.) desteği
 #   pip install pystray pillow    # Windows dışında sistem tepsisi desteği
+#   pip install cryptography      # AES-128 HLS çözümü için isteğe bağlı hızlandırıcı
 #
 # Video platformlarında ayrı ses/video akışlarını birleştirmek için
 # sistemde FFmpeg bulunmalıdır (isteğe bağlı, yt-dlp tarafından kullanılır).

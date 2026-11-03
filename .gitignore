@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.build/
+*.idmpart
+.idm-*.part*
+.idm-*.merged
+*.tmp
+.venv/
+venv/
+.DS_Store
